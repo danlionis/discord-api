@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 extern crate async_std;
 extern crate chrono;
 extern crate discord;
@@ -6,21 +7,21 @@ extern crate serde_json;
 extern crate simple_logger;
 extern crate tokio;
 
+use discord::cache::Cache;
+use discord::model::gateway::DispatchEvent;
 use discord::model::User;
 use discord::rest::RestClient;
-use discord::wrapper::Wrap;
-use discord::Event;
 use futures::StreamExt;
 use std::sync::{Arc, RwLock};
-use tokio::runtime::Runtime;
 
 #[derive(Debug)]
 struct State {
-    running_since: std::time::Instant,
-    current_user: User,
+    running_since: Option<std::time::Instant>,
+    current_user: Option<User>,
 }
 
-fn main() {
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let token = "NTEyMzAxMjI4ODAyNDQxMjI2.W-xLsw.gXVtWaEmOJ1ZhiL-20cuG4vYxHw";
     // env_logger::from_env(env_logger::Env::default().default_filter_or("debug")).init();
     simple_logger::SimpleLogger::new()
@@ -28,61 +29,99 @@ fn main() {
         .init()
         .unwrap();
 
-    let mut rt = Runtime::new().unwrap();
+    let rest_client = RestClient::new(token);
 
-    let handle = rt.handle().clone();
-    let rest_client = Arc::new(RestClient::new(token));
+    let state = Arc::new(RwLock::new(State {
+        running_since: None,
+        current_user: None,
+    }));
 
-    let mut state = None;
+    let mut cache = Cache::new();
 
-    rt.block_on(async {
-        let shard = discord::gateway::Shard::with_rest_client(token, Arc::clone(&rest_client));
-        let (conn, mut events) = shard.connection();
+    let shard = discord::gateway::Shard::with_rest_client(token, rest_client.clone());
+    let (conn, mut events) = shard.connection();
 
-        let running = handle.spawn(conn.run());
+    let running = tokio::spawn(conn.run());
 
-        while let Some(event) = events.next().await {
-            match event {
-                Event::Ready(current_user) => {
-                    state = Some(Arc::new(RwLock::new(State {
-                        running_since: std::time::Instant::now(),
-                        current_user,
-                    })));
-                }
-                Event::MessageCreate(msg) => {
-                    let msg = msg.wrap(Arc::clone(&rest_client));
-                    handle.spawn(handle_message(msg, Arc::clone(state.as_ref().unwrap())));
-                }
-                Event::MessageUpdate(msg) => {
-                    dbg!(msg);
-                }
-                Event::MessageDelete(deleted) => {
-                    dbg!(deleted);
-                }
-                Event::GuildCreate(_) => {}
-                _ => {
-                    // println!("{}", serde_json::to_string_pretty(&event).unwrap());
-                }
-            }
+    while let Some(event) = events.next().await {
+        cache.update(&event);
+
+        tokio::spawn(handle_event(event, Arc::clone(&state), rest_client.clone()));
+    }
+
+    let _ = running.await.unwrap();
+
+    Ok(())
+}
+
+async fn handle_event(event: DispatchEvent, state: Arc<RwLock<State>>, rest_client: RestClient) {
+    // dbg!(&event);
+    // match &event {
+    //     DispatchEvent::GuildMemberAdd(_)
+    //     | DispatchEvent::GuildMemberRemove(_)
+    //     | DispatchEvent::GuildMemberUpdate(_) => {
+    //         dbg!(&event);
+    //     }
+    //     _ => {}
+    // }
+    // let mut unnamed = std::fs::OpenOptions::new()
+    //     .append(true)
+    //     .create(true)
+    //     .open("unnamed.mpak")
+    //     .unwrap();
+    // let mut named = std::fs::OpenOptions::new()
+    //     .append(true)
+    //     .create(true)
+    //     .open("named.mpak")
+    //     .unwrap();
+
+    // rmp_serde::encode::write(&mut unnamed, &event).unwrap();
+    // rmp_serde::encode::write_named(&mut named, &event).unwrap();
+
+    match event {
+        DispatchEvent::Ready(ready) => {
+            let mut state = state.write().unwrap();
+            state.current_user = Some(ready.user);
+            state.running_since = Some(std::time::Instant::now());
         }
-
-        let _ = running.await.unwrap();
-    });
+        DispatchEvent::MessageCreate(msg) => {
+            let msg = rest_client.wrap(msg);
+            handle_message(msg, state).await;
+        }
+        DispatchEvent::MessageUpdate(msg) => {
+            dbg!(msg);
+        }
+        DispatchEvent::MessageDelete(deleted) => {
+            dbg!(deleted);
+        }
+        DispatchEvent::Resume => {
+            dbg!("resumed");
+        }
+        _ => {
+            // println!("{}", serde_json::to_string_pretty(&event).unwrap());
+        }
+    }
 }
 
 async fn handle_message(msg: discord::model::MessageWrapper, state: Arc<RwLock<State>>) {
-    if msg.author.bot {
-        return;
-    }
-
     match msg.content.as_str() {
         "ping" => {
             msg.reply("pong").await.unwrap();
         }
         "uptime" => {
+            let uptime = state
+                .read()
+                .ok()
+                .map(|s| s.running_since)
+                .flatten()
+                .map(|i| i.elapsed())
+                .unwrap_or_default();
+
+            let d = duration_parts(uptime);
+
             msg.reply(format!(
-                "{}m",
-                state.read().unwrap().running_since.elapsed().as_secs() / 60
+                "```json\n{}```",
+                serde_json::to_string_pretty(&d).unwrap()
             ))
             .await
             .unwrap();
@@ -95,17 +134,51 @@ async fn handle_message(msg: discord::model::MessageWrapper, state: Arc<RwLock<S
         }
     };
 }
+#[derive(Debug, serde::Serialize)]
+struct DurationSplit {
+    seconds_total: u64,
+    minutes_total: u64,
+    hours_total: u64,
+    days_total: u64,
+}
 
-// fn main_test() {
-//     let builder = ShardBuilder::new("token");
+impl DurationSplit {
+    pub fn seconds(&self) -> u64 {
+        self.seconds_total % 60
+    }
 
-//     let (conn, shard) = builder.build()
+    pub fn minutes(&self) -> u64 {
+        self.minutes_total % 60
+    }
 
-//     tokio::spawn(conn);
+    pub fn hours(&self) -> u64 {
+        self.hours_total % 24
+    }
 
-//     let events = shard.events();
+    pub fn days(&self) -> u64 {
+        self.days_total
+    }
+}
 
-//     while let Some(event) = events.recv().await {
-//     }
+// impl std::convert::From<std::time::Duration> for DurationSplit {}
 
-// }
+fn duration_parts(duration: std::time::Duration) -> DurationSplit {
+    let seconds_total = duration.as_secs();
+    let minutes_total = seconds_total / 60;
+    let hours_total = minutes_total / 60;
+    let days_total = hours_total / 24;
+
+    DurationSplit {
+        seconds_total,
+        minutes_total,
+        hours_total,
+        days_total,
+    }
+
+    // match max_part {
+    //     DurationPart::Second => (0, 0, 0, secs_total),
+    //     DurationPart::Minute => (0, 0, minutes_total, secs),
+    //     DurationPart::Hour => (0, hours_total, minutes, secs),
+    //     DurationPart::Day => (days, hours, minutes, secs),
+    // }
+}

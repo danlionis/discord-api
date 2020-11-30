@@ -2,12 +2,20 @@ use super::routes;
 use crate::error::Error;
 use crate::model::id::{ChannelId, MessageId};
 use crate::model::Message;
+use crate::wrapper::ModelWrapper;
 use hyper;
-use serde::Deserialize;
+use std::sync::Arc;
 
 pub struct RestClient {
-    client: hyper::Client<hyper_tls::HttpsConnector<hyper::client::HttpConnector>>,
-    token: String,
+    inner: Arc<Inner>,
+}
+
+impl Clone for RestClient {
+    fn clone(&self) -> Self {
+        RestClient {
+            inner: Arc::clone(&self.inner),
+        }
+    }
 }
 
 impl std::fmt::Debug for RestClient {
@@ -16,23 +24,15 @@ impl std::fmt::Debug for RestClient {
     }
 }
 
-#[derive(Deserialize)]
-struct Gateway {
-    pub url: String,
-}
-
 impl RestClient {
-    pub fn new<T>(token: T) -> Self
-    where
-        T: AsRef<str>,
-    {
-        let https = hyper_tls::HttpsConnector::new();
-        let client = hyper::Client::builder().build::<_, hyper::Body>(https);
-
+    pub fn new(token: &str) -> Self {
         RestClient {
-            client,
-            token: format!("Bot {}", token.as_ref()),
+            inner: Arc::new(Inner::new(token)),
         }
+    }
+
+    pub fn wrap<T>(&self, inner: T) -> ModelWrapper<T> {
+        ModelWrapper::new(inner, self.clone())
     }
 
     pub async fn get_guilds(&self) {
@@ -68,6 +68,7 @@ impl RestClient {
         let body = serde_json::json!({ "content": content });
 
         let res = self
+            .inner
             .post(
                 routes::channel_messages(channel_id.into()).parse().unwrap(),
                 body,
@@ -85,19 +86,20 @@ impl RestClient {
         channel_id: ChannelId,
         message_id: MessageId,
     ) -> Result<(), Error> {
-        self.delete(
-            routes::text_message(channel_id.into(), message_id.into())
-                .parse()
-                .unwrap(),
-        )
-        .await?;
+        self.inner
+            .delete(
+                routes::text_message(channel_id.into(), message_id.into())
+                    .parse()
+                    .unwrap(),
+            )
+            .await?;
         Ok(())
     }
 
     pub async fn get_gateway(&self) -> Result<String, Error> {
         let url = routes::gateway().parse().unwrap();
 
-        let res = self.get(url).await?;
+        let res = self.inner.get(url).await?;
 
         let buf = hyper::body::to_bytes(res).await?;
 
@@ -105,6 +107,23 @@ impl RestClient {
         let gateway_url = v.as_object().unwrap().get("url").unwrap().as_str().unwrap();
 
         Ok(gateway_url.to_owned())
+    }
+}
+
+struct Inner {
+    client: hyper::Client<hyper_tls::HttpsConnector<hyper::client::HttpConnector>>,
+    token: String,
+}
+
+impl Inner {
+    fn new(token: &str) -> Self {
+        let https = hyper_tls::HttpsConnector::new();
+        let client = hyper::Client::builder().build::<_, hyper::Body>(https);
+
+        Inner {
+            client,
+            token: format!("Bot {}", token),
+        }
     }
 
     fn get_req_builder(

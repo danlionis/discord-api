@@ -1,19 +1,17 @@
 use crate::rest::RestClient;
 use std::ops::{Deref, DerefMut};
-use std::sync::Arc;
 
 /// Utility to wrap a Model with access to a [`RestClient`]
+///
+/// by itself this type does not have any methods associated with it
 #[derive(Debug)]
 pub struct ModelWrapper<T> {
     inner: T,
-    rest_client: Arc<RestClient>,
+    rest_client: RestClient,
 }
 
 impl<T> ModelWrapper<T> {
-    pub fn new(inner: T, rest_client: Arc<RestClient>) -> Self
-    where
-        T: Wrap,
-    {
+    pub fn new(inner: T, rest_client: RestClient) -> Self {
         ModelWrapper { inner, rest_client }
     }
 
@@ -39,8 +37,14 @@ impl<T> DerefMut for ModelWrapper<T> {
     }
 }
 
-pub trait Wrap: Sized {
-    fn wrap(self, rest_client: Arc<RestClient>) -> ModelWrapper<Self> {
-        ModelWrapper::new(self, rest_client)
-    }
+#[macro_export]
+macro_rules! wrap_model {
+    ($v:vis $name:ident, $model:ident) => {
+        /// A Wrapper that adds additional methods to the [`$model`] type
+        $v type $name = $crate::wrapper::ModelWrapper<$model>;
+    };
+}
+
+struct Ts {
+    yeet: u64,
 }

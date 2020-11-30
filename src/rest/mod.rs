@@ -8,5 +8,5 @@ pub fn client<T>(token: T) -> RestClient
 where
     T: AsRef<str>,
 {
-    RestClient::new(token)
+    RestClient::new(token.as_ref())
 }

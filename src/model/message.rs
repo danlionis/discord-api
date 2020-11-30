@@ -4,7 +4,7 @@ use super::user::User;
 use crate::error::Error;
 use crate::model::emoji::Emoji;
 use crate::model::id::{ApplicationId, AttachmentId, ChannelId, GuildId, MessageId, RoleId};
-use crate::wrapper::{ModelWrapper, Wrap};
+use crate::wrap_model;
 use crate::Snowflake;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -21,7 +21,7 @@ pub struct Message {
     /// id of the guild the message was sent in
     pub guild_id: Option<GuildId>,
     /// the author of this message
-    pub author: User,
+    pub author: Option<User>,
     /// member properties for this message's author
     pub member: Option<GuildMember>,
     /// contents of this message
@@ -64,6 +64,33 @@ pub struct Message {
     pub message_reference: Option<MessageReference>,
     /// extra features of the message
     pub flags: i32,
+}
+
+#[derive(Clone, PartialEq, Eq, Hash, Debug, Deserialize, Serialize)]
+pub struct MessageUpdate {
+    pub id: MessageId,
+    pub guild_id: Option<GuildId>,
+    pub attachments: Option<Vec<Attachment>>,
+    pub author: Option<User>,
+    pub channel_id: ChannelId,
+    pub content: Option<String>,
+    pub edited_timestamp: Option<String>,
+    pub embeds: Option<Vec<Embed>>,
+    #[serde(rename = "type")]
+    pub kind: Option<i32>,
+    pub mention_everyone: Option<bool>,
+    pub mention_roles: Option<Vec<RoleId>>,
+    pub mentions: Option<Vec<User>>,
+    pub pinned: Option<bool>,
+    pub timestamp: Option<DateTime<Utc>>,
+    pub tts: Option<bool>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone, Hash)]
+pub struct MessageDelete {
+    id: MessageId,
+    channel_id: ChannelId,
+    guild_id: Option<GuildId>,
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug, Deserialize, Serialize)]
@@ -144,10 +171,7 @@ pub struct MessageReference {
     guild_id: Option<GuildId>,
 }
 
-impl Wrap for Message {}
-
-/// A Wrapper that adds additional methods to the [`Message`] type
-pub type MessageWrapper = ModelWrapper<Message>;
+wrap_model!(pub MessageWrapper, Message);
 
 impl MessageWrapper {
     /// Send a message in the same text channel as the original message

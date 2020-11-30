@@ -14,7 +14,7 @@ pub struct Role {
     /// position of this role
     position: usize,
     /// permission bit set
-    #[serde(rename = "permissions_new")]
+    // #[serde(rename = "permissions_new")]
     permissions: Snowflake,
     /// whether this role is managed by an integration
     managed: bool,

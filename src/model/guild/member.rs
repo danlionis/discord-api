@@ -1,4 +1,5 @@
-use crate::model::user::User;
+use crate::model::id::GuildId;
+use crate::model::User;
 use crate::Snowflake;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -24,4 +25,6 @@ pub struct GuildMember {
     /// whether the user is server-muted in voice channels
     #[serde(rename = "mute")]
     pub server_mute: bool,
+    /// id of the guild
+    pub guild_id: Option<GuildId>,
 }
