@@ -2,11 +2,17 @@ use std::convert::From;
 
 #[derive(Debug)]
 pub enum Error {
+    DiscordError(DiscordError),
     RequestError(hyper::Error),
     ApiError(ApiError),
     ParseError(serde_json::Error),
     WebsocketError(async_tungstenite::tungstenite::Error),
     Custom(String),
+}
+
+#[derive(Debug)]
+pub enum DiscordError {
+    SendError,
 }
 
 impl From<async_tungstenite::tungstenite::Error> for Error {

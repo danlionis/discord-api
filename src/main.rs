@@ -8,7 +8,8 @@ extern crate simple_logger;
 extern crate tokio;
 
 use discord::cache::Cache;
-use discord::model::gateway::DispatchEvent;
+use discord::gateway::Shard;
+use discord::model::gateway::Event;
 use discord::model::User;
 use discord::rest::RestClient;
 use futures::StreamExt;
@@ -22,8 +23,8 @@ struct State {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let token = std::env::var("TOKEN");
     let token = "NTEyMzAxMjI4ODAyNDQxMjI2.W-xLsw.gXVtWaEmOJ1ZhiL-20cuG4vYxHw";
-    // env_logger::from_env(env_logger::Env::default().default_filter_or("debug")).init();
     simple_logger::SimpleLogger::new()
         .with_level(log::LevelFilter::Debug)
         .init()
@@ -38,7 +39,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut cache = Cache::new();
 
-    let shard = discord::gateway::Shard::with_rest_client(token, rest_client.clone());
+    let shard = Shard::with_rest_client(token, rest_client.clone());
     let (conn, mut events) = shard.connection();
 
     let running = tokio::spawn(conn.run());
@@ -49,61 +50,40 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         tokio::spawn(handle_event(event, Arc::clone(&state), rest_client.clone()));
     }
 
-    let _ = running.await.unwrap();
+    let _x = running.await.unwrap().unwrap();
 
     Ok(())
 }
 
-async fn handle_event(event: DispatchEvent, state: Arc<RwLock<State>>, rest_client: RestClient) {
+async fn handle_event(event: Event, _state: Arc<RwLock<State>>, _rest_client: RestClient) {
     // dbg!(&event);
-    // match &event {
-    //     DispatchEvent::GuildMemberAdd(_)
-    //     | DispatchEvent::GuildMemberRemove(_)
-    //     | DispatchEvent::GuildMemberUpdate(_) => {
-    //         dbg!(&event);
-    //     }
-    //     _ => {}
+
+    // if let DispatchEvent::GuildCreate(_) = event {
+    //     return;
     // }
-    // let mut unnamed = std::fs::OpenOptions::new()
-    //     .append(true)
-    //     .create(true)
-    //     .open("unnamed.mpak")
-    //     .unwrap();
-    // let mut named = std::fs::OpenOptions::new()
-    //     .append(true)
-    //     .create(true)
-    //     .open("named.mpak")
-    //     .unwrap();
+
+    match event {
+        Event::MessageCreate(msg) => handle_message(_rest_client.wrap(msg), _state).await,
+        _ => {}
+    }
+
+    // let ser_event = rmp_serde::to_vec(&event).unwrap();
+
+    // dbg!(&ser_event);
+
+    // let de_event: DispatchEvent = rmp_serde::from_slice(&ser_event).unwrap();
 
     // rmp_serde::encode::write(&mut unnamed, &event).unwrap();
     // rmp_serde::encode::write_named(&mut named, &event).unwrap();
 
-    match event {
-        DispatchEvent::Ready(ready) => {
-            let mut state = state.write().unwrap();
-            state.current_user = Some(ready.user);
-            state.running_since = Some(std::time::Instant::now());
-        }
-        DispatchEvent::MessageCreate(msg) => {
-            let msg = rest_client.wrap(msg);
-            handle_message(msg, state).await;
-        }
-        DispatchEvent::MessageUpdate(msg) => {
-            dbg!(msg);
-        }
-        DispatchEvent::MessageDelete(deleted) => {
-            dbg!(deleted);
-        }
-        DispatchEvent::Resume => {
-            dbg!("resumed");
-        }
-        _ => {
-            // println!("{}", serde_json::to_string_pretty(&event).unwrap());
-        }
-    }
+    // dbg!(de_event);
 }
 
 async fn handle_message(msg: discord::model::MessageWrapper, state: Arc<RwLock<State>>) {
+    if msg.author.as_ref().map(|a| a.bot).unwrap_or(false) {
+        return;
+    }
+
     match msg.content.as_str() {
         "ping" => {
             msg.reply("pong").await.unwrap();
@@ -130,7 +110,7 @@ async fn handle_message(msg: discord::model::MessageWrapper, state: Arc<RwLock<S
             msg.delete().await.unwrap();
         }
         _ => {
-            // msg.reply(&msg.content).await.unwrap();
+            dbg!(msg);
         }
     };
 }
@@ -174,11 +154,4 @@ fn duration_parts(duration: std::time::Duration) -> DurationSplit {
         hours_total,
         days_total,
     }
-
-    // match max_part {
-    //     DurationPart::Second => (0, 0, 0, secs_total),
-    //     DurationPart::Minute => (0, 0, minutes_total, secs),
-    //     DurationPart::Hour => (0, hours_total, minutes, secs),
-    //     DurationPart::Day => (days, hours, minutes, secs),
-    // }
 }

@@ -1,5 +1,7 @@
+use crate::model::gateway::{GatewayCommand, GatewayEvent};
 use serde::{Deserialize, Serialize};
 
+/// Opcode values for Gateway Events
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 #[repr(u8)]
 pub enum Opcode {
@@ -14,6 +16,32 @@ pub enum Opcode {
     InvalidSession = 9,
     Hello = 10,
     HeartbeatACK = 11,
+}
+
+impl From<&GatewayEvent> for Opcode {
+    fn from(event: &GatewayEvent) -> Self {
+        match event {
+            GatewayEvent::Dispatch(_, _) => Opcode::Dispatch,
+            GatewayEvent::Heartbeat(_) => Opcode::Heartbeat,
+            GatewayEvent::Reconnect => Opcode::Reconect,
+            GatewayEvent::InvalidSession(_) => Opcode::InvalidSession,
+            GatewayEvent::Hello(_) => Opcode::Hello,
+            GatewayEvent::HeartbeatAck => Opcode::HeartbeatACK,
+        }
+    }
+}
+
+impl From<&GatewayCommand> for Opcode {
+    fn from(command: &GatewayCommand) -> Self {
+        match command {
+            GatewayCommand::Heartbeat(_) => Opcode::Heartbeat,
+            GatewayCommand::Identify(_) => Opcode::Identify,
+            GatewayCommand::Resume(_) => Opcode::Resume,
+            GatewayCommand::UpdateVoiceState(_) => Opcode::VoiceStateUpdate,
+            GatewayCommand::UpdateStatus(_) => Opcode::PresenceUpdate,
+            GatewayCommand::RequestGuildMembers(_) => Opcode::RequestGuildMembers,
+        }
+    }
 }
 
 impl std::convert::From<u8> for Opcode {

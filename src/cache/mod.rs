@@ -1,4 +1,4 @@
-use crate::model::gateway::DispatchEvent;
+use crate::model::gateway::Event;
 use crate::model::{id::MessageId, Message};
 use dashmap::DashMap;
 use std::fmt::Debug;
@@ -33,16 +33,16 @@ pub struct Inner {
 }
 
 impl Cache {
-    pub fn update(&mut self, event: &DispatchEvent) {
+    pub fn update(&mut self, event: &Event) {
         match event {
-            DispatchEvent::Ready(_usr) => {
+            Event::Ready(_usr) => {
                 let mut connected_since = self.inner.connected_since.write().unwrap();
                 *connected_since = Some(Instant::now());
             }
-            DispatchEvent::MessageCreate(msg) => {
+            Event::MessageCreate(msg) => {
                 self.inner.messages.insert(msg.id, msg.clone());
             }
-            DispatchEvent::MessageUpdate(_msg) => {
+            Event::MessageUpdate(_msg) => {
                 // update message
             }
             _ => {}

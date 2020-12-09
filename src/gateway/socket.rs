@@ -1,9 +1,9 @@
 use crate::model::gateway::intents;
-use crate::model::gateway::{DispatchEvent, GatewayEvent, GatewayEventSeed, Ready};
+use crate::model::gateway::{GatewayCommand, GatewayEvent, GatewayEventSeed};
 use async_tungstenite::{
     self as ws,
     tokio::ConnectStream,
-    tungstenite::{Error as WsError, Message as WsMessage},
+    tungstenite::{Error, Message as WsMessage},
     WebSocketStream,
 };
 use futures::prelude::*;
@@ -12,7 +12,7 @@ use std::task::Poll;
 
 const GATEWAY_VERSION: u16 = 8;
 
-/// `GatewaySocket` forwards
+/// `GatewaySocket` forwards GatewayEvents from and to the Gateway
 ///
 pub struct GatewaySocket {
     inner: Option<WebSocketStream<ConnectStream>>,
@@ -27,69 +27,36 @@ impl GatewaySocket {
         self.inner.is_some()
     }
 
-    pub async fn reconnect(
-        &mut self,
-        gateway_url: &str,
-        token: &str,
-        session_id: &str,
-        seq: u64,
-    ) -> Result<u64, WsError> {
-        if let Some(mut s) = self.inner.take() {
-            s.close(None).await?;
-        }
-
-        let (stream, _) = ws::tokio::connect_async(gateway_url).await?;
-        self.inner = Some(stream);
-
-        let hello = {
-            match self.next().await.unwrap() {
-                GatewayEvent::Hello(h) => h,
-                _ => unreachable!("hello should be first packet to recieve"),
-            }
-        };
-        self.send(resume_payload(token, session_id, seq)).await?;
-
-        Ok(hello.heartbeat_interval)
-    }
-
-    pub async fn connect(
-        &mut self,
-        gateway_url: &str,
-        token: &str,
-    ) -> Result<(u64, Ready), WsError> {
+    /// start the connection to the gateway websocket
+    pub async fn connect(&mut self, gateway_url: &str) -> Result<(), Error> {
         let (stream, _) = ws::tokio::connect_async(gateway_url).await?;
 
         self.inner = Some(stream);
-
-        let hello = {
-            match self.next().await.unwrap() {
-                GatewayEvent::Hello(h) => h,
-                _ => unreachable!("hello should be first packet to recieve"),
-            }
-        };
-
-        self.send(identify_payload(token)).await?;
-        let ready = {
-            match self.next().await.unwrap() {
-                GatewayEvent::Dispatch(_, DispatchEvent::Ready(ready)) => ready,
-                GatewayEvent::InvalidSession(_reconnectable) => {
-                    dbg!(_reconnectable);
-                    todo!()
-                }
-                _ => unreachable!(),
-            }
-        };
-
-        Ok((hello.heartbeat_interval, ready))
-    }
-
-    pub async fn send(&mut self, content: String) -> Result<(), WsError> {
-        let stream = self.inner.as_mut().expect("socket not connected");
-
-        stream.send(WsMessage::Text(content)).await?;
 
         Ok(())
     }
+
+    /// terminate the websocket connection if it exists
+    pub async fn disconnect(&mut self) -> Result<(), Error> {
+        if let Some(mut s) = self.inner.take() {
+            s.close(None).await?
+        }
+        Ok(())
+    }
+
+    /// close the current connection if it exisits and reconnect
+    pub async fn reconnect(&mut self, gateway_url: &str) -> Result<(), Error> {
+        self.disconnect().await?;
+        self.connect(gateway_url).await
+    }
+
+    //    pub async fn send(&mut self, content: String) -> Result<(), Error> {
+    //        let stream = self.inner.as_mut().expect("socket not connected");
+    //
+    //        stream.send(WsMessage::Text(content)).await?;
+    //
+    //        Ok(())
+    //    }
 }
 
 impl Stream for GatewaySocket {
@@ -123,6 +90,47 @@ impl Stream for GatewaySocket {
             }
             Poll::Pending => Poll::Pending,
         }
+    }
+}
+
+impl Sink<GatewayCommand> for GatewaySocket {
+    type Error = Error;
+
+    fn poll_ready(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> Poll<Result<(), Self::Error>> {
+        let stream = self.inner.as_mut().expect("socket not connected");
+        stream.poll_ready_unpin(cx)
+    }
+
+    fn start_send(
+        mut self: std::pin::Pin<&mut Self>,
+        item: GatewayCommand,
+    ) -> Result<(), Self::Error> {
+        let stream = self.inner.as_mut().expect("socket not connected");
+
+        stream.start_send_unpin(WsMessage::Text(
+            serde_json::to_string(&item).expect("deserialize GatewayCommand"),
+        ))
+    }
+
+    fn poll_flush(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> Poll<Result<(), Self::Error>> {
+        let stream = self.inner.as_mut().expect("socket not connected");
+
+        stream.poll_flush_unpin(cx)
+    }
+
+    fn poll_close(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> Poll<Result<(), Self::Error>> {
+        let stream = self.inner.as_mut().expect("socket not connected");
+
+        stream.poll_close_unpin(cx)
     }
 }
 

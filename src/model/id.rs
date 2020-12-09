@@ -55,30 +55,6 @@ macro_rules! impl_snowflake {
     };
 }
 
-// #[derive(Clone, Copy, Debug, Ord, PartialOrd, Eq, PartialEq, Hash, Serialize, Deserialize)]
-// pub struct UserId(Snowflake);
-
-// #[derive(Clone, Copy, Debug, Ord, PartialOrd, Eq, PartialEq, Hash, Serialize, Deserialize)]
-// pub struct GuildId(Snowflake);
-
-// #[derive(Clone, Copy, Debug, Ord, PartialOrd, Eq, PartialEq, Hash, Serialize, Deserialize)]
-// pub struct ChannelId(Snowflake);
-
-// #[derive(Clone, Copy, Debug, Ord, PartialOrd, Eq, PartialEq, Hash, Serialize, Deserialize)]
-// pub struct MessageId(Snowflake);
-
-// #[derive(Clone, Copy, Debug, Ord, PartialOrd, Eq, PartialEq, Hash, Serialize, Deserialize)]
-// pub struct RoleId(Snowflake);
-
-// #[derive(Clone, Copy, Debug, Ord, PartialOrd, Eq, PartialEq, Hash, Serialize, Deserialize)]
-// pub struct EmojiId(Snowflake);
-
-// #[derive(Clone, Copy, Debug, Ord, PartialOrd, Eq, PartialEq, Hash, Serialize, Deserialize)]
-// pub struct AttachmentId(Snowflake);
-
-// #[derive(Clone, Copy, Debug, Ord, PartialOrd, Eq, PartialEq, Hash, Serialize, Deserialize)]
-// pub struct ApplicationId(Snowflake);
-
 impl_snowflake!(
     ApplicationId,
     UserId,

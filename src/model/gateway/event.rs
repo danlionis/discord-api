@@ -9,6 +9,23 @@ use serde::{
 
 use crate::model::gateway::dispatch::*;
 
+/// Event received from the Gateway
+#[derive(Debug, PartialEq)]
+pub enum GatewayEvent {
+    Dispatch(u64, Event),
+    Heartbeat(u64),
+    HeartbeatAck,
+    Hello(Hello),
+    InvalidSession(bool),
+    Reconnect,
+}
+
+impl GatewayEvent {
+    pub fn opcode(&self) -> Opcode {
+        Opcode::from(self)
+    }
+}
+
 /// A `GatewayEventSeed` is a Deserializer that contains information
 /// about how to serialize a GatewayEvent such as the opcode, sequence number
 /// and (if it is a dispatch event) the type of the event
@@ -35,7 +52,7 @@ impl<'a> GatewayEventSeed<'a> {
             Self::find(json_str, r#""op":"#).expect(&format!("missing opcode: {}", json_str));
         let seq: Option<u64> = Self::find(json_str, r#""s":"#);
 
-        // don't bother to parse the event kind if the event is not a dispatch
+        // only search for type if event is dispatch
         let event_kind = if op == Opcode::Dispatch {
             Self::find_event_kind(json_str)
         } else {
@@ -55,7 +72,7 @@ impl<'a> GatewayEventSeed<'a> {
         let key = r#""t":"#;
 
         let from = json_str.find(key)? + key.len();
-        let to = json_str[from..].find(|c: char| [',', '}'].contains(&c))?;
+        let to = json_str[from..].find([',', '}'].as_ref())?;
         let res = json_str[from..from + to].trim();
 
         match res {
@@ -64,9 +81,12 @@ impl<'a> GatewayEventSeed<'a> {
         }
     }
 
-    fn find<T: std::str::FromStr>(json_str: &str, key: &str) -> Option<T> {
+    fn find<T>(json_str: &str, key: &str) -> Option<T>
+    where
+        T: std::str::FromStr,
+    {
         let from = json_str.find(key)? + key.len();
-        let to = json_str[from..].find(|c: char| [',', '}'].contains(&c))?;
+        let to = json_str[from..].find([',', '}'].as_ref())?;
         let res = json_str[from..from + to].trim();
 
         T::from_str(res).ok()
@@ -97,78 +117,80 @@ enum Field {
 
 pub(crate) struct GatewayEventVisitor<'a>(GatewayEventSeed<'a>);
 
-fn find_field<'de, T, V>(map: &mut V, field: Field) -> Result<T, V::Error>
-where
-    T: Deserialize<'de>,
-    V: MapAccess<'de>,
-{
-    let mut found = None;
+impl<'a> GatewayEventVisitor<'a> {
+    fn find_field<'de, T, V>(map: &mut V, field: Field) -> Result<T, V::Error>
+    where
+        T: Deserialize<'de>,
+        V: MapAccess<'de>,
+    {
+        let mut found = None;
 
-    loop {
-        match map.next_key::<Field>() {
-            Ok(Some(key)) if key == field => found = Some(map.next_value()?),
-            Ok(Some(_)) => {
-                map.next_value::<IgnoredAny>()?;
-                continue;
-            }
-            _ => {
-                break;
-            }
-        }
-    }
-
-    found.ok_or_else(|| {
-        DeError::missing_field(match field {
-            Field::D => "d",
-            Field::Op => "op",
-            Field::S => "s",
-            Field::T => "t",
-        })
-    })
-}
-
-fn find_field_seed<'de, T, V>(map: &mut V, field: Field, seed: T) -> Result<T::Value, V::Error>
-where
-    V: MapAccess<'de>,
-    T: DeserializeSeed<'de>,
-{
-    let mut found = None;
-
-    loop {
-        match map.next_key::<Field>() {
-            Ok(Some(key)) if key == field => {
-                found = Some(map.next_value_seed(seed)?);
-                break;
-            }
-            Ok(Some(_)) => {
-                map.next_value::<IgnoredAny>()?;
-                continue;
-            }
-            _ => {
-                break;
+        loop {
+            match map.next_key::<Field>() {
+                Ok(Some(key)) if key == field => found = Some(map.next_value()?),
+                Ok(Some(_)) => {
+                    map.next_value::<IgnoredAny>()?;
+                    continue;
+                }
+                _ => {
+                    break;
+                }
             }
         }
-    }
 
-    found.ok_or_else(|| {
-        DeError::missing_field(match field {
-            Field::D => "d",
-            Field::Op => "op",
-            Field::S => "s",
-            Field::T => "t",
+        found.ok_or_else(|| {
+            DeError::missing_field(match field {
+                Field::D => "d",
+                Field::Op => "op",
+                Field::S => "s",
+                Field::T => "t",
+            })
         })
-    })
-}
-
-fn ignore_all<'de, V>(map: &mut V) -> Result<(), V::Error>
-where
-    V: MapAccess<'de>,
-{
-    while let Ok(Some(_)) | Err(_) = map.next_key::<Field>() {
-        map.next_value::<IgnoredAny>()?;
     }
 
-    Ok(())
+    fn find_field_seed<'de, T, V>(map: &mut V, field: Field, seed: T) -> Result<T::Value, V::Error>
+    where
+        V: MapAccess<'de>,
+        T: DeserializeSeed<'de>,
+    {
+        let mut found = None;
+
+        loop {
+            match map.next_key::<Field>() {
+                Ok(Some(key)) if key == field => {
+                    found = Some(map.next_value_seed(seed)?);
+                    break;
+                }
+                Ok(Some(_)) => {
+                    map.next_value::<IgnoredAny>()?;
+                    continue;
+                }
+                _ => {
+                    break;
+                }
+            }
+        }
+
+        found.ok_or_else(|| {
+            DeError::missing_field(match field {
+                Field::D => "d",
+                Field::Op => "op",
+                Field::S => "s",
+                Field::T => "t",
+            })
+        })
+    }
+
+    fn ignore_all<'de, V>(map: &mut V) -> Result<(), V::Error>
+    where
+        V: MapAccess<'de>,
+    {
+        while let Ok(Some(_)) | Err(_) = map.next_key::<Field>() {
+            map.next_value::<IgnoredAny>()?;
+        }
+
+        Ok(())
+    }
 }
 
 impl<'de> Visitor<'de> for GatewayEventVisitor<'_> {
@@ -187,7 +209,7 @@ impl<'de> Visitor<'de> for GatewayEventVisitor<'_> {
 
         let res = match op {
             Opcode::Dispatch => {
-                let dispatch_event = find_field_seed(
+                let dispatch_event = Self::find_field_seed(
                     &mut map,
                     Field::D,
                     DispatchEventSeed::new(self.0.event_kind),
@@ -195,16 +217,16 @@ impl<'de> Visitor<'de> for GatewayEventVisitor<'_> {
                 GatewayEvent::Dispatch(seq.unwrap_or(0), dispatch_event)
             }
             Opcode::Hello => {
-                let hello = find_field(&mut map, Field::D)?;
+                let hello = Self::find_field(&mut map, Field::D)?;
                 GatewayEvent::Hello(hello)
             }
             Opcode::Heartbeat => {
-                let last_seq = find_field(&mut map, Field::D)?;
+                let last_seq = Self::find_field(&mut map, Field::D)?;
                 GatewayEvent::Heartbeat(last_seq)
             }
             Opcode::Reconect => GatewayEvent::Reconnect,
             Opcode::InvalidSession => {
-                let resumable = find_field(&mut map, Field::D)?;
+                let resumable = Self::find_field(&mut map, Field::D)?;
                 GatewayEvent::InvalidSession(resumable)
             }
             Opcode::HeartbeatACK => GatewayEvent::HeartbeatAck,
@@ -218,30 +240,15 @@ impl<'de> Visitor<'de> for GatewayEventVisitor<'_> {
             }
         };
         // ignore the rest of the fields
-        ignore_all(&mut map)?;
+        Self::ignore_all(&mut map)?;
 
         Ok(res)
     }
 }
 
-#[derive(Debug, PartialEq)]
-pub enum GatewayEvent {
-    Dispatch(u64, DispatchEvent),
-    Heartbeat(u64),
-    HeartbeatAck,
-    Hello(Hello),
-    InvalidSession(bool),
-    Reconnect,
-    Identify,
-    PresenceUpdate,
-    VoiceStateUpdate,
-    Resume,
-    RequestGuildMembers,
-}
-
 /// A Gateway Dispatch Event
 #[derive(PartialEq, Clone, Debug, Serialize, Deserialize)]
-pub enum DispatchEvent {
+pub enum Event {
     Resume,
     MessageCreate(Message),
     MessageUpdate(MessageUpdate),
@@ -280,6 +287,49 @@ pub enum DispatchEvent {
     WebhooksUpdate(WebhooksUpdate),
 }
 
+impl Event {
+    pub fn kind(&self) -> &str {
+        match self {
+            Event::Resume => "RESUME",
+            Event::MessageCreate(_) => "MESSAGE_CREATE",
+            Event::MessageUpdate(_) => "MESSAGE_UPDATE",
+            Event::MessageDelete(_) => "MESSAGE_DELETE",
+            Event::MessageDeleteBulk(_) => "MESSAGE_DELETE_BULK",
+            Event::MessageReactionAdd(_) => "MESSAGE_REACTION_ADD",
+            Event::MessageReactionRemove(_) => "MESSAGE_REACTION_REMOVE",
+            Event::MessageReactionRemoveAll(_) => "MESSAGE_REACTION_REMOVE_ALL",
+            Event::MessageReactionRemoveEmoji(_) => "MESSAGE_REACTOIN_REMOVE_EMOJI",
+            Event::ChannelCreate(_) => "CHANNEL_CREATE",
+            Event::ChannelDelete(_) => "CHANNEL_DELETE",
+            Event::ChannelUpdate(_) => "CHANNEL_UDPATE",
+            Event::ChannelPinsUpdates(_) => "CHANNEL_PINS_UPDATE",
+            Event::GuildCreate(_) => "GUILD_CREATE",
+            Event::GuildUpdate(_) => "GUILD_UPDATE",
+            Event::GuildDelete(_) => "GUILD_DELETE",
+            Event::GuildBanAdd(_) => "GUILD_BAN_ADD",
+            Event::GuildBanRemove(_) => "GUILD_BAN_REMOVE",
+            Event::GuildEmojisUpdate(_) => "GUILD_EMOJIS_UPDATE",
+            Event::GuildMembersChunk(_) => "GUILD_MEMBERS_CHUNK",
+            Event::GuildIntegrationsUpdate(_) => "GUILD_INTEGRATIONS_UPDATE",
+            Event::GuildMemberAdd(_) => "GUILD_MEMBER_ADD",
+            Event::GuildMemberRemove(_) => "GUILD_MEMBER_REMOVE",
+            Event::GuildMemberUpdate(_) => "GUILD_MEMBER_UPDATE",
+            Event::GuildRoleCreate(_) => "GUILD_ROLE_CREATE",
+            Event::GuildRoleUpdate(_) => "GUILD_ROLE_UPDATE",
+            Event::GuildRoleDelete(_) => "GUILD_ROLE_DELETE",
+            Event::PresenceUpdate(_) => "PRESENCE_UPDATE",
+            Event::UserUpdate(_) => "USER_UPDATE",
+            Event::VoiceStateUpdate(_) => "VOICE_STATE_UPDATE",
+            Event::VoiceServerUpdate(_) => "VOICE_SERVER_UPDATE",
+            Event::Ready(_) => "READY",
+            Event::TypingStart(_) => "TYPING_START",
+            Event::InviteCreate(_) => "INVITE_CREATE",
+            Event::InviteDelete(_) => "INVITE_DELETE",
+            Event::WebhooksUpdate(_) => "WEBHOOKS_UPDATE",
+        }
+    }
+}
+
 pub(crate) struct DispatchEventSeed<'a> {
     event_kind: Option<&'a str>,
 }
@@ -291,7 +341,7 @@ impl<'a> DispatchEventSeed<'a> {
 }
 
 impl<'de> DeserializeSeed<'de> for DispatchEventSeed<'_> {
-    type Value = DispatchEvent;
+    type Value = Event;
 
     fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
     where
@@ -300,93 +350,71 @@ impl<'de> DeserializeSeed<'de> for DispatchEventSeed<'_> {
         let event_kind = self.event_kind.expect("event_kind required");
 
         let res = match event_kind {
-            "READY" => DispatchEvent::Ready(Ready::deserialize(deserializer)?),
+            "READY" => Event::Ready(Ready::deserialize(deserializer)?),
             "RESUMED" => {
                 IgnoredAny::deserialize(deserializer)?;
-                DispatchEvent::Resume
+                Event::Resume
             }
-            "CHANNEL_CREATE" => DispatchEvent::ChannelCreate(Channel::deserialize(deserializer)?),
-            "CHANNEL_UPDATE" => DispatchEvent::ChannelUpdate(Channel::deserialize(deserializer)?),
-            "CHANNEL_DELETE" => DispatchEvent::ChannelDelete(Channel::deserialize(deserializer)?),
-            "CHANNEL_PINS_UPDATE" => {
-                DispatchEvent::ChannelPinsUpdates(Channel::deserialize(deserializer)?)
-            }
-            "GUILD_BAN_ADD" => DispatchEvent::GuildBanAdd(GuildBanAdd::deserialize(deserializer)?),
-            "GUILD_BAN_REMOVE" => {
-                DispatchEvent::GuildBanRemove(GuildBanRemove::deserialize(deserializer)?)
-            }
-            "GUILD_CREATE" => DispatchEvent::GuildCreate(Guild::deserialize(deserializer)?),
-            "GUILD_DELETE" => {
-                DispatchEvent::GuildDelete(UnavailableGuild::deserialize(deserializer)?)
-            }
+            "CHANNEL_CREATE" => Event::ChannelCreate(Channel::deserialize(deserializer)?),
+            "CHANNEL_UPDATE" => Event::ChannelUpdate(Channel::deserialize(deserializer)?),
+            "CHANNEL_DELETE" => Event::ChannelDelete(Channel::deserialize(deserializer)?),
+            "CHANNEL_PINS_UPDATE" => Event::ChannelPinsUpdates(Channel::deserialize(deserializer)?),
+            "GUILD_BAN_ADD" => Event::GuildBanAdd(GuildBanAdd::deserialize(deserializer)?),
+            "GUILD_BAN_REMOVE" => Event::GuildBanRemove(GuildBanRemove::deserialize(deserializer)?),
+            "GUILD_CREATE" => Event::GuildCreate(Guild::deserialize(deserializer)?),
+            "GUILD_DELETE" => Event::GuildDelete(UnavailableGuild::deserialize(deserializer)?),
             "GUILD_EMOJIS_UPDATE" => {
-                DispatchEvent::GuildEmojisUpdate(GuildEmojisUpdate::deserialize(deserializer)?)
+                Event::GuildEmojisUpdate(GuildEmojisUpdate::deserialize(deserializer)?)
             }
-            "GUILD_INTEGRATIONS_UPDATE" => DispatchEvent::GuildIntegrationsUpdate(
-                GuildIntegrationsUpdate::deserialize(deserializer)?,
-            ),
-            "GUILD_MEMBER_ADD" => {
-                DispatchEvent::GuildMemberAdd(GuildMember::deserialize(deserializer)?)
+            "GUILD_INTEGRATIONS_UPDATE" => {
+                Event::GuildIntegrationsUpdate(GuildIntegrationsUpdate::deserialize(deserializer)?)
             }
+            "GUILD_MEMBER_ADD" => Event::GuildMemberAdd(GuildMember::deserialize(deserializer)?),
             "GUILD_MEMBER_REMOVE" => {
-                DispatchEvent::GuildMemberRemove(GuildMemberRemove::deserialize(deserializer)?)
+                Event::GuildMemberRemove(GuildMemberRemove::deserialize(deserializer)?)
             }
             "GUILD_MEMBER_UPDATE" => {
-                DispatchEvent::GuildMemberUpdate(GuildMemberUpdate::deserialize(deserializer)?)
+                Event::GuildMemberUpdate(GuildMemberUpdate::deserialize(deserializer)?)
             }
             "GUILD_MEMBERS_CHUNK" => {
-                DispatchEvent::GuildMembersChunk(GuildMembersChunk::deserialize(deserializer)?)
+                Event::GuildMembersChunk(GuildMembersChunk::deserialize(deserializer)?)
             }
             "GUILD_ROLE_CREATE" => {
-                DispatchEvent::GuildRoleCreate(GuildRoleCreate::deserialize(deserializer)?)
+                Event::GuildRoleCreate(GuildRoleCreate::deserialize(deserializer)?)
             }
             "GUILD_ROLE_DELETE" => {
-                DispatchEvent::GuildRoleDelete(GuildRoleDelete::deserialize(deserializer)?)
+                Event::GuildRoleDelete(GuildRoleDelete::deserialize(deserializer)?)
             }
             "GUILD_ROLE_UPDATE" => {
-                DispatchEvent::GuildRoleUpdate(GuildRoleUpdate::deserialize(deserializer)?)
+                Event::GuildRoleUpdate(GuildRoleUpdate::deserialize(deserializer)?)
             }
-            "INVITE_CREATE" => {
-                DispatchEvent::InviteCreate(InviteCreate::deserialize(deserializer)?)
-            }
-            "INVITE_DELETE" => {
-                DispatchEvent::InviteDelete(InviteDelete::deserialize(deserializer)?)
-            }
-            "GUILD_UPDATE" => DispatchEvent::GuildUpdate(Guild::deserialize(deserializer)?),
-            "MESSAGE_CREATE" => DispatchEvent::MessageCreate(Message::deserialize(deserializer)?),
-            "MESSAGE_DELETE" => {
-                DispatchEvent::MessageDelete(MessageDelete::deserialize(deserializer)?)
-            }
+            "INVITE_CREATE" => Event::InviteCreate(InviteCreate::deserialize(deserializer)?),
+            "INVITE_DELETE" => Event::InviteDelete(InviteDelete::deserialize(deserializer)?),
+            "GUILD_UPDATE" => Event::GuildUpdate(Guild::deserialize(deserializer)?),
+            "MESSAGE_CREATE" => Event::MessageCreate(Message::deserialize(deserializer)?),
+            "MESSAGE_DELETE" => Event::MessageDelete(MessageDelete::deserialize(deserializer)?),
             "MESSAGE_DELETE_BULK" => {
-                DispatchEvent::MessageDeleteBulk(MessageDeleteBulk::deserialize(deserializer)?)
+                Event::MessageDeleteBulk(MessageDeleteBulk::deserialize(deserializer)?)
             }
             "MESSAGE_REACTION_ADD" => {
-                DispatchEvent::MessageReactionAdd(MessageReactionAdd::deserialize(deserializer)?)
+                Event::MessageReactionAdd(MessageReactionAdd::deserialize(deserializer)?)
             }
-            "MESSAGE_REACTION_REMOVE" => DispatchEvent::MessageReactionRemove(
-                MessageReactionRemove::deserialize(deserializer)?,
-            ),
-            "MESSAGE_REACTION_REMOVE_ALL" => DispatchEvent::MessageReactionRemoveAll(
+            "MESSAGE_REACTION_REMOVE" => {
+                Event::MessageReactionRemove(MessageReactionRemove::deserialize(deserializer)?)
+            }
+            "MESSAGE_REACTION_REMOVE_ALL" => Event::MessageReactionRemoveAll(
                 MessageReactionRemoveAll::deserialize(deserializer)?,
             ),
-            "MESSAGE_UPDATE" => {
-                DispatchEvent::MessageUpdate(MessageUpdate::deserialize(deserializer)?)
-            }
-            "PRESENCE_UPDATE" => {
-                DispatchEvent::PresenceUpdate(Presence::deserialize(deserializer)?)
-            }
+            "MESSAGE_UPDATE" => Event::MessageUpdate(MessageUpdate::deserialize(deserializer)?),
+            "PRESENCE_UPDATE" => Event::PresenceUpdate(Presence::deserialize(deserializer)?),
             // "PRESENCES_REPLACE" => DispatchEvent::Unhandled,
-            "TYPING_START" => DispatchEvent::TypingStart(TypingStart::deserialize(deserializer)?),
-            "USER_UPDATE" => DispatchEvent::UserUpdate(User::deserialize(deserializer)?),
+            "TYPING_START" => Event::TypingStart(TypingStart::deserialize(deserializer)?),
+            "USER_UPDATE" => Event::UserUpdate(User::deserialize(deserializer)?),
             "VOICE_SERVER_UPDATE" => {
-                DispatchEvent::VoiceServerUpdate(VoiceServerUpdate::deserialize(deserializer)?)
+                Event::VoiceServerUpdate(VoiceServerUpdate::deserialize(deserializer)?)
             }
-            "VOICE_STATE_UPDATE" => {
-                DispatchEvent::VoiceStateUpdate(VoiceState::deserialize(deserializer)?)
-            }
-            "WEBHOOKS_UPDATE" => {
-                DispatchEvent::WebhooksUpdate(WebhooksUpdate::deserialize(deserializer)?)
-            }
+            "VOICE_STATE_UPDATE" => Event::VoiceStateUpdate(VoiceState::deserialize(deserializer)?),
+            "WEBHOOKS_UPDATE" => Event::WebhooksUpdate(WebhooksUpdate::deserialize(deserializer)?),
             _ => panic!("unknown event type"),
         };
 
@@ -404,7 +432,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_gateway_event_seed() {
+    fn test_gateway_event_from_json() {
         let input = r#"{"op":0,"s":0,"t":null}"#;
         let seed = GatewayEventSeed::from_json_str(input);
         assert_eq!(seed, GatewayEventSeed::new(0.into(), Some(0), None));
