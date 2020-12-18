@@ -1,7 +1,5 @@
-use crate::model::{
-    id::{ChannelId, GuildId},
-    Presence,
-};
+use crate::model::id::{ApplicationId, ChannelId, GuildId, UserId};
+use crate::model::Presence;
 use crate::model::{Channel, Emoji, GuildMember, Role, VoiceState};
 use crate::Snowflake;
 use chrono::{DateTime, Utc};
@@ -22,7 +20,8 @@ pub struct Guild {
     /// true if the user is the owner of the guild
     pub owner: Option<bool>,
     /// id of the owner
-    pub owner_id: Snowflake,
+    pub owner_id: UserId,
+    // TODO: find better type than Snowflake
     /// legacy total permissions for the uer in the guild (excludes overrides)
     pub permissions: Option<Snowflake>,
     /// voice region id fo the guild
@@ -46,17 +45,17 @@ pub struct Guild {
     /// required MFA level for the guild
     pub mfa_level: u32,
     /// application id of the guild creator if it is bot-created
-    pub application_id: Option<Snowflake>,
+    pub application_id: Option<ApplicationId>,
     /// true if the server widget is enabled
     pub widget_enabled: Option<bool>,
     /// the channel id that the widget will generate an invite to, or `None` if set to no invite
-    pub widget_channel_id: Option<Snowflake>,
+    pub widget_channel_id: Option<ChannelId>,
     /// the id of the channel where guild notices such as welcome messages and boost events are posted
-    pub system_channel_id: Option<Snowflake>,
+    pub system_channel_id: Option<ChannelId>,
     /// system channel flags
     pub system_channel_flags: u32,
     /// the id of the channel where guild with the `PUBLIC` feature can display rules and/or guidelines
-    pub rules_channel_id: Option<Snowflake>,
+    pub rules_channel_id: Option<ChannelId>,
     /// when this guild was joined at (only with the `GUILD_CREATE` event)
     pub joined_at: Option<DateTime<Utc>>,
     /// true if this guild is unavailable due to an outage (only with the `GUILD_CREATE` event
@@ -87,7 +86,7 @@ pub struct Guild {
     /// the preffered locale of a guild with the `PUBLIC` feature; used in server discovery and notices from Discord
     pub preferred_locale: String,
     /// the id of the channel where admins and moderators of guild with the `PUBLIC` feature recieve notices from Discord
-    pub public_updates_channel_id: Option<Snowflake>,
+    pub public_updates_channel_id: Option<ChannelId>,
     /// the maximum amount of users in a video channel
     pub max_video_channel_users: Option<u32>,
     /// approximate number of members in this guild

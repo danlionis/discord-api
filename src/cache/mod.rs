@@ -40,7 +40,7 @@ impl Cache {
                 *connected_since = Some(Instant::now());
             }
             Event::MessageCreate(msg) => {
-                self.inner.messages.insert(msg.id, msg.clone());
+                self.inner.messages.insert(msg.id, *msg.clone());
             }
             Event::MessageUpdate(_msg) => {
                 // update message

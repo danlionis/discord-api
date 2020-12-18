@@ -1,9 +1,9 @@
 use super::socket::GatewaySocket;
-use crate::error::{DiscordError, Error};
+use crate::error::{CloseCode, DiscordError, Error};
 use crate::model::gateway::command::{self, GatewayCommand};
-use crate::model::gateway::{intents, Event, GatewayEvent, Ready};
+use crate::model::gateway::{Event, GatewayEvent, Hello, Ready};
 use crate::rest::RestClient;
-use futures::{future, SinkExt, Stream, StreamExt};
+use futures::prelude::*;
 use std::time;
 use time::Duration;
 use tokio::{sync::mpsc, time::Interval};
@@ -36,6 +36,7 @@ impl Shard {
             event_sender: tx,
             socket: GatewaySocket::new(),
             heartbeat_interval: None,
+            hearbeat_ackd: true,
         };
 
         let events = Events { rx };
@@ -53,6 +54,7 @@ pub struct Connection {
     pub event_sender: mpsc::UnboundedSender<Event>,
     pub socket: GatewaySocket,
     pub heartbeat_interval: Option<Interval>,
+    pub hearbeat_ackd: bool,
 }
 
 impl Connection {
@@ -60,16 +62,21 @@ impl Connection {
     ///
     /// This function has to be awaited in order to run it
     /// and only returns, if there is an error or the connection stops
-    pub async fn run(mut self) -> Result<(), Error> {
-        let mut gateway_url = self.rest_client.get_gateway().await.unwrap();
+    pub async fn run(&mut self) -> Result<(), Error> {
+        let mut gateway_url = self
+            .rest_client
+            .get_gateway()
+            .await
+            .expect("could not get gateway url");
         gateway_url.push_str("/?v=8");
 
-        let ready = self.init_connection(&gateway_url).await?;
+        let (hello, ready) = self.init_connection(&gateway_url).await?;
 
-        let shard = ready.shard.unwrap_or((0.into(), 0));
-        log::info!("Shard ready: [{}, {}]", shard.0, shard.1);
-        log::info!("Session ID: {}", &ready.session_id);
-        log::info!("User: {}", ready.user.tag());
+        let shard = ready.shard.unwrap_or((0, 0));
+        log::info!("shard ready: [{}, {}]", shard.0, shard.1);
+        log::info!("session ID: {}", &ready.session_id);
+        log::info!("user: {}", ready.user.tag());
+        log::debug!("heartbeat interval: {}s", hello.heartbeat_interval / 1000);
         self.session_id = Some(ready.session_id.clone());
 
         self.running_since = Some(time::Instant::now());
@@ -87,13 +94,18 @@ impl Connection {
                 future::Either::Left(_) => {
                     self.heartbeat().await;
                 }
-                future::Either::Right((Some(event), _)) => match event {
+                future::Either::Right((Some(Ok(event)), _)) => match event {
                     GatewayEvent::Dispatch(seq, e) => {
+                        log::debug!("dispatch event= {}", e.kind());
                         self.seq = seq;
                         match &e {
                             Event::MessageCreate(m) => {
                                 if m.content.as_str() == "reconnect" {
                                     self.reconnect(&gateway_url).await?;
+                                }
+                                if m.content.as_str() == "dc" {
+                                    self.socket.close().await?;
+                                    break;
                                 }
                             }
                             _ => {}
@@ -109,7 +121,7 @@ impl Connection {
                         self.reconnect(&gateway_url).await?;
                     }
                     GatewayEvent::InvalidSession(reconnectable) => {
-                        log::warn!("invalid session");
+                        log::warn!("invalid session; reconnectable: {}", reconnectable);
                         if reconnectable {
                             self.reconnect(&gateway_url).await?;
                         } else {
@@ -117,58 +129,83 @@ impl Connection {
                         }
                     }
                     GatewayEvent::Hello(_hello) => {}
-                    GatewayEvent::HeartbeatAck => {}
+                    GatewayEvent::HeartbeatAck => {
+                        self.hearbeat_ackd = true;
+                        log::trace!("heartbeat ack");
+                    }
                 },
-                _ => panic!("weird state"),
+                future::Either::Right((Some(Err(Error::GatewayClosed(code))), _)) => {
+                    match code {
+                        CloseCode::UnknownError | CloseCode::SessionTimedOut => {
+                            log::warn!("connection closed: {:?}", code);
+                            self.reconnect(&gateway_url).await?;
+                        }
+                        _ => {}
+                    };
+                }
+                future::Either::Right((Some(Err(err)), _)) => {
+                    log::error!("an error occured: {:?}", err);
+
+                    self.reconnect(&gateway_url).await?;
+                }
+                future::Either::Right((None, _)) => panic!("socket closed"),
             }
         }
-        // unimplemented!()
         Ok(())
     }
 
     /// initialize the connection to the gateway
-    pub async fn init_connection(&mut self, gateway_url: &str) -> Result<Ready, Error> {
+    pub async fn init_connection(&mut self, gateway_url: &str) -> Result<(Hello, Ready), Error> {
         self.socket.connect(gateway_url).await?;
 
-        let hello = match self.socket.next().await.unwrap() {
+        let hello = match self.socket.next().await.unwrap().unwrap() {
             GatewayEvent::Hello(h) => h,
             _ => unreachable!("hello should be first packet to recieve"),
         };
 
+        log::debug!("received initial hello");
+
         self.heartbeat_interval = Some(tokio::time::interval(Duration::from_millis(
             hello.heartbeat_interval,
         )));
+        log::debug!("initialized heartbeat interval");
 
         self.socket
-            .send(GatewayCommand::Identify(identify_payload(&self.token)))
+            .send(GatewayCommand::Identify(command::Identify::new(
+                &self.token,
+            )))
             .await?;
 
-        let ready = match self.socket.next().await.unwrap() {
+        log::debug!("sent identify payload");
+
+        let ready = match self.socket.next().await.unwrap().unwrap() {
             GatewayEvent::Dispatch(_, Event::Ready(ready)) => ready,
             GatewayEvent::InvalidSession(_reconnectable) => {
-                dbg!(_reconnectable);
-                todo!()
+                panic!("invalid session");
             }
             _ => unreachable!(),
         };
 
-        Ok(ready)
+        Ok((hello, ready))
     }
 
     pub async fn reconnect(&mut self, gateway_url: &str) -> Result<u64, Error> {
         self.socket.reconnect(gateway_url).await?;
 
-        let hello = match self.socket.next().await.unwrap() {
+        let hello = match self.socket.next().await.unwrap().unwrap() {
             GatewayEvent::Hello(h) => h,
             _ => unreachable!("hello should be first packet to recieve"),
         };
-        self.socket
-            .send(GatewayCommand::Resume(resume_payload(
-                &self.token,
-                self.session_id.as_ref().unwrap(),
-                self.seq,
-            )))
-            .await?;
+        let resume = command::Resume {
+            token: self.token.clone(),
+            session_id: self.session_id.cloned().unwrap(),
+            seq: self.seq,
+        };
+        self.socket.send(GatewayCommand::Resume(resume)).await?;
+
+        self.heartbeat_interval = Some(tokio::time::interval(Duration::from_millis(
+            hello.heartbeat_interval,
+        )));
 
         Ok(hello.heartbeat_interval)
     }
@@ -181,6 +218,10 @@ impl Connection {
 
     async fn heartbeat(&mut self) {
         log::debug!("heartbeating seq= {}", self.seq);
+
+        // TODO: handle heartbeat not ackd
+
+        self.hearbeat_ackd = false;
         self.socket
             .send(GatewayCommand::Heartbeat(self.seq))
             .await
@@ -194,41 +235,16 @@ impl Connection {
 
 // impl Future for Connection {
 //     type Output = Result<(), Error>;
-
+//
 //     fn poll(
-//         self: std::pin::Pin<&mut Self>,
+//         mut self: std::pin::Pin<&mut Self>,
 //         cx: &mut std::task::Context<'_>,
 //     ) -> std::task::Poll<Self::Output> {
-//         dbg!("polling");
-//         let fut = self.run();
-//         pin_mut!(fut);
-//         fut.poll(cx)
+//         unimplemented!()
 //     }
 // }
 
-fn identify_payload(token: &str) -> command::Identify {
-    let properties = command::ConnectionProperties {
-        os: "donbot".to_owned(),
-        device: "donbot".to_owned(),
-        browser: "donbot".to_owned(),
-    };
-    command::Identify {
-        token: token.to_owned(),
-        properties,
-        large_threshold: None,
-        shard: (0, 1),
-        presence: None,
-        intents: intents::ALL,
-    }
-}
-
-fn resume_payload(token: &str, session_id: &str, seq: u64) -> command::Resume {
-    command::Resume {
-        token: token.to_owned(),
-        session_id: session_id.to_owned(),
-        seq,
-    }
-}
+fn resume_payload(token: &str, session_id: &str, seq: u64) -> command::Resume {}
 
 pub struct Events {
     rx: mpsc::UnboundedReceiver<Event>,

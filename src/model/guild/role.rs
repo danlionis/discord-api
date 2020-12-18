@@ -1,10 +1,11 @@
+use crate::model::id::RoleId;
 use crate::Snowflake;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug, Deserialize, Serialize)]
 pub struct Role {
     /// role id
-    id: Snowflake,
+    id: RoleId,
     /// role name
     name: String,
     /// integer representaion of hexadeciaml color code

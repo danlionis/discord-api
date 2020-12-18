@@ -36,7 +36,7 @@ pub struct User {
     ///
     /// [flags]: https://discord.com/developers/docs/resources/user#user-object-user-flags
     #[serde(default)]
-    flags: u32,
+    flags: u64,
     /// the [type of Nitro subscription] on a user's account
     ///
     /// [type of Nitro subscription]: https://discord.com/developers/docs/resources/user#user-object-premium-types
@@ -44,7 +44,7 @@ pub struct User {
     pub premium_type: u8,
     /// the public [flags] on a user's account
     #[serde(default)]
-    pub public_flags: u32,
+    pub public_flags: u64,
 }
 
 impl User {

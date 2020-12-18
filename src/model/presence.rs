@@ -20,7 +20,6 @@ pub struct Presence {
     pub user: PartialUser,
     #[serde(default)]
     pub roles: Vec<RoleId>,
-    pub game: Option<Activity>,
     pub guild_id: Option<GuildId>,
     pub status: String,
     pub activities: Vec<Activity>,

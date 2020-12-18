@@ -1,4 +1,5 @@
 use std::convert::From;
+use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode as WsCloseCode;
 
 #[derive(Debug)]
 pub enum Error {
@@ -6,7 +7,8 @@ pub enum Error {
     RequestError(hyper::Error),
     ApiError(ApiError),
     ParseError(serde_json::Error),
-    WebsocketError(async_tungstenite::tungstenite::Error),
+    WebsocketError(tokio_tungstenite::tungstenite::Error),
+    GatewayClosed(CloseCode),
     Custom(String),
 }
 
@@ -15,8 +17,8 @@ pub enum DiscordError {
     SendError,
 }
 
-impl From<async_tungstenite::tungstenite::Error> for Error {
-    fn from(err: async_tungstenite::tungstenite::Error) -> Self {
+impl From<tokio_tungstenite::tungstenite::Error> for Error {
+    fn from(err: tokio_tungstenite::tungstenite::Error) -> Self {
         Self::WebsocketError(err)
     }
 }
@@ -36,6 +38,59 @@ impl From<hyper::Error> for Error {
 impl From<ApiError> for Error {
     fn from(err: ApiError) -> Self {
         Self::ApiError(err)
+    }
+}
+
+impl From<CloseCode> for Error {
+    fn from(code: CloseCode) -> Self {
+        Self::GatewayClosed(code)
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+#[repr(u16)]
+pub enum CloseCode {
+    UnknownError = 4000,
+    UnknownOpcode = 4001,
+    DecodeError = 4002,
+    NotAuthenticated = 4003,
+    AuthenticationFailed = 4004,
+    AlreadyAuthenticated = 4005,
+    InvalidSeq = 4007,
+    RateLimited = 4008,
+    SessionTimedOut = 4009,
+    InvalidShard = 4010,
+    ShardingRequired = 4011,
+    InvalidAPIVersion = 4012,
+    InvalidIntents = 4013,
+    DisallowedIntents = 4014,
+}
+
+impl From<u16> for CloseCode {
+    fn from(v: u16) -> Self {
+        match v {
+            4001 => CloseCode::UnknownOpcode,
+            4003 => CloseCode::DecodeError,
+            4004 => CloseCode::NotAuthenticated,
+            4005 => CloseCode::AuthenticationFailed,
+            4006 => CloseCode::AlreadyAuthenticated,
+            4007 => CloseCode::InvalidSeq,
+            4008 => CloseCode::RateLimited,
+            4009 => CloseCode::SessionTimedOut,
+            4010 => CloseCode::InvalidShard,
+            4011 => CloseCode::ShardingRequired,
+            4012 => CloseCode::InvalidAPIVersion,
+            4013 => CloseCode::InvalidIntents,
+            4014 => CloseCode::DisallowedIntents,
+            _ => CloseCode::UnknownError,
+        }
+    }
+}
+
+impl From<WsCloseCode> for CloseCode {
+    fn from(v: WsCloseCode) -> Self {
+        let v: u16 = v.into();
+        CloseCode::from(v)
     }
 }
 

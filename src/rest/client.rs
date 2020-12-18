@@ -2,6 +2,7 @@ use super::routes;
 use crate::error::Error;
 use crate::model::id::{ChannelId, MessageId};
 use crate::model::Message;
+use crate::model::MessageReference;
 use crate::wrapper::ModelWrapper;
 use hyper;
 use std::sync::Arc;
@@ -64,8 +65,9 @@ impl RestClient {
         &self,
         channel_id: ChannelId,
         content: &str,
+        reference: Option<MessageReference>,
     ) -> Result<Message, Error> {
-        let body = serde_json::json!({ "content": content });
+        let body = serde_json::json!({ "content": content, "message_reference": reference });
 
         let res = self
             .inner

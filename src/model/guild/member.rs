@@ -1,6 +1,5 @@
-use crate::model::id::GuildId;
+use crate::model::id::{GuildId, RoleId};
 use crate::model::User;
-use crate::Snowflake;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -14,7 +13,7 @@ pub struct GuildMember {
     /// the users guild nickname
     pub nick: Option<String>,
     /// array of [`Role`] object ids
-    pub roles: Vec<Snowflake>,
+    pub roles: Vec<RoleId>,
     /// when the user joined the guild
     pub joined_at: DateTime<Utc>,
     /// when the user started boosting the guild

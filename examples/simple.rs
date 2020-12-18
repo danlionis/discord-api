@@ -1,18 +1,11 @@
 #![allow(dead_code)]
-extern crate async_std;
-extern crate chrono;
-extern crate discord;
-extern crate log;
-extern crate serde_json;
-extern crate simple_logger;
-extern crate tokio;
 
 use discord::cache::Cache;
 use discord::gateway::Shard;
 use discord::model::gateway::Event;
 use discord::model::User;
 use discord::rest::RestClient;
-use futures::StreamExt;
+use futures::prelude::*;
 use std::sync::{Arc, RwLock};
 
 #[derive(Debug)]
@@ -23,8 +16,9 @@ struct State {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let token = std::env::var("TOKEN");
-    let token = "NTEyMzAxMjI4ODAyNDQxMjI2.W-xLsw.gXVtWaEmOJ1ZhiL-20cuG4vYxHw";
+    let token = std::env::var("TOKEN").expect("missing token");
+    let token = token.as_str();
+    // let token = "Invalid Token";
     simple_logger::SimpleLogger::new()
         .with_level(log::LevelFilter::Debug)
         .init()
@@ -40,9 +34,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut cache = Cache::new();
 
     let shard = Shard::with_rest_client(token, rest_client.clone());
-    let (conn, mut events) = shard.connection();
+    let (mut conn, mut events) = shard.connection();
 
-    let running = tokio::spawn(conn.run());
+    let running = tokio::spawn(async move { conn.run().await });
 
     while let Some(event) = events.next().await {
         cache.update(&event);
@@ -50,39 +44,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         tokio::spawn(handle_event(event, Arc::clone(&state), rest_client.clone()));
     }
 
-    let _x = running.await.unwrap().unwrap();
+    let _res = running.await.unwrap().unwrap();
 
     Ok(())
 }
 
-async fn handle_event(event: Event, _state: Arc<RwLock<State>>, _rest_client: RestClient) {
-    // dbg!(&event);
-
-    // if let DispatchEvent::GuildCreate(_) = event {
-    //     return;
-    // }
-
+async fn handle_event(event: Event, state: Arc<RwLock<State>>, rest_client: RestClient) {
     match event {
-        Event::MessageCreate(msg) => handle_message(_rest_client.wrap(msg), _state).await,
+        Event::MessageCreate(msg) => handle_message(rest_client.wrap(*msg), state).await,
+        Event::Ready(_) => {
+            state.write().unwrap().running_since = Some(std::time::Instant::now());
+        }
         _ => {}
     }
-
-    // let ser_event = rmp_serde::to_vec(&event).unwrap();
-
-    // dbg!(&ser_event);
-
-    // let de_event: DispatchEvent = rmp_serde::from_slice(&ser_event).unwrap();
-
-    // rmp_serde::encode::write(&mut unnamed, &event).unwrap();
-    // rmp_serde::encode::write_named(&mut named, &event).unwrap();
-
-    // dbg!(de_event);
 }
 
 async fn handle_message(msg: discord::model::MessageWrapper, state: Arc<RwLock<State>>) {
     if msg.author.as_ref().map(|a| a.bot).unwrap_or(false) {
         return;
     }
+    dbg!(&msg);
 
     match msg.content.as_str() {
         "ping" => {
@@ -109,9 +90,8 @@ async fn handle_message(msg: discord::model::MessageWrapper, state: Arc<RwLock<S
         "delete" => {
             msg.delete().await.unwrap();
         }
-        _ => {
-            dbg!(msg);
-        }
+        "reply" => {}
+        _ => {}
     };
 }
 #[derive(Debug, serde::Serialize)]

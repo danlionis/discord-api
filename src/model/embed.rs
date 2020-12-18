@@ -20,22 +20,53 @@ pub struct Embed {
 }
 
 #[derive(Clone, Hash, Eq, PartialEq, Serialize, Deserialize, Debug)]
-pub struct EmbedFooter {}
+pub struct EmbedFooter {
+    text: String,
+    icon_url: Option<String>,
+    proxy_icon_url: Option<String>,
+}
 
 #[derive(Clone, Hash, Eq, PartialEq, Serialize, Deserialize, Debug)]
-pub struct EmbedImage {}
+pub struct EmbedImage {
+    url: Option<String>,
+    proxy_url: Option<String>,
+    height: Option<u32>,
+    width: Option<u32>,
+}
 
 #[derive(Clone, Hash, Eq, PartialEq, Serialize, Deserialize, Debug)]
-pub struct EmbedThumbnail {}
+pub struct EmbedThumbnail {
+    url: Option<String>,
+    proxy_url: Option<String>,
+    height: Option<u32>,
+    width: Option<u32>,
+}
 
 #[derive(Clone, Hash, Eq, PartialEq, Serialize, Deserialize, Debug)]
-pub struct EmbedVideo {}
+pub struct EmbedVideo {
+    url: Option<String>,
+    height: Option<u32>,
+    width: Option<u32>,
+}
 
 #[derive(Clone, Hash, Eq, PartialEq, Serialize, Deserialize, Debug)]
-pub struct EmbedProvider {}
+pub struct EmbedProvider {
+    name: Option<String>,
+    url: Option<String>,
+}
 
 #[derive(Clone, Hash, Eq, PartialEq, Serialize, Deserialize, Debug)]
-pub struct EmbedAuthor {}
+pub struct EmbedAuthor {
+    name: Option<String>,
+    url: Option<String>,
+    icon_url: Option<String>,
+    proxy_icon_url: Option<String>,
+}
 
 #[derive(Clone, Hash, Eq, PartialEq, Serialize, Deserialize, Debug)]
-pub struct EmbedFields {}
+pub struct EmbedFields {
+    name: String,
+    value: String,
+    #[serde(default)]
+    inline: bool,
+}

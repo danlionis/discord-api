@@ -32,5 +32,5 @@ pub fn text_message(id: u64, message_id: u64) -> String {
 }
 
 pub fn gateway() -> String {
-    api!("/gateway").to_owned()
+    api!("/gateway/bot").to_owned()
 }

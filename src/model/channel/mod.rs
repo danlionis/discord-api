@@ -1,5 +1,5 @@
 use crate::error::Error;
-use crate::model::id::{ApplicationId, ChannelId, GuildId, MessageId, UserId};
+use crate::model::id::{ChannelId, GuildId, MessageId, UserId};
 use crate::model::PermissonOverwrite;
 use crate::model::{Message, User};
 use crate::wrapper::ModelWrapper;
@@ -7,7 +7,10 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 
-#[derive(Debug, Eq, PartialEq, Clone, Hash)]
+mod raw;
+use raw::RawChannel;
+
+#[derive(Debug, Eq, PartialEq, Clone, Copy, Hash)]
 #[repr(u8)]
 pub enum ChannelType {
     GuildText = 0,
@@ -50,12 +53,11 @@ impl Serialize for ChannelType {
     where
         S: serde::Serializer,
     {
-        let v = self.clone() as u8;
-        serializer.serialize_u8(v as u8)
+        serializer.serialize_u8(*self as u8)
     }
 }
 
-#[derive(Serialize, Debug, Clone, Hash, Eq, PartialEq)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub enum Channel {
     Guild(GuildChannel),
     Private(PrivateChannel),
@@ -114,6 +116,16 @@ impl std::convert::From<RawChannel> for GuildChannel {
     }
 }
 
+impl Serialize for Channel {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let raw = RawChannel::from(self.clone());
+        raw.serialize(serializer)
+    }
+}
+
 #[derive(Debug)]
 pub struct InvalidChannelTypeError;
 
@@ -130,7 +142,7 @@ impl TryFrom<RawChannel> for GuildTextChannel {
             guild_id: raw.guild_id,
             name: raw.name.unwrap(),
             position: raw.position.unwrap(),
-            permission_overwrites: raw.permisson_overwrites,
+            permission_overwrites: raw.permission_overwrites.unwrap(),
             rate_limit_per_user: raw.rate_limit_per_user.unwrap(),
             nsfw: raw.nsfw.unwrap_or_default(),
             topic: raw.topic,
@@ -154,7 +166,7 @@ impl TryFrom<RawChannel> for VoiceChannel {
             guild_id: raw.guild_id,
             name: raw.name.unwrap(),
             position: raw.position.unwrap(),
-            permission_overwrites: raw.permisson_overwrites,
+            permission_overwrites: raw.permission_overwrites.unwrap(),
             nsfw: raw.nsfw.unwrap_or_default(),
             bitrate: raw.bitrate.unwrap(),
             parent_id: raw.parent_id,
@@ -176,7 +188,7 @@ impl TryFrom<RawChannel> for CategoryChannel {
             guild_id: raw.guild_id,
             name: raw.name.unwrap(),
             position: raw.position.unwrap(),
-            permission_overwrites: raw.permisson_overwrites,
+            permission_overwrites: raw.permission_overwrites.unwrap(),
             nsfw: raw.nsfw.unwrap_or_default(),
             parent_id: raw.parent_id,
         })
@@ -194,7 +206,7 @@ impl<'de> Deserialize<'de> for Channel {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Hash, Eq, PartialEq)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub enum GuildChannel {
     Text(GuildTextChannel),
     Voice(VoiceChannel),
@@ -222,69 +234,18 @@ impl GuildChannel {
 #[derive(Serialize, Deserialize, Debug, Clone, Hash, Eq, PartialEq)]
 pub struct PrivateChannel {
     id: ChannelId,
+    last_message_id: Option<MessageId>,
+    recipients: Option<Vec<User>>,
 }
 
-/// Represents a guild or DM channel within Discord
-///
-/// https://discord.com/developers/docs/resources/channel#channel-object
-#[derive(Clone, PartialEq, Eq, Hash, Debug, Deserialize, Serialize)]
-struct RawChannel {
-    /// the id of this channel
+#[derive(Serialize, Deserialize, Debug, Clone, Hash, Eq, PartialEq)]
+pub struct GroupChannel {
     id: ChannelId,
-
-    /// the type of channel
-    #[serde(rename = "type")]
-    kind: ChannelType,
-
-    /// the id of the guild
-    guild_id: Option<GuildId>,
-
-    /// sorting position of the channel
-    position: Option<i32>,
-
-    /// explicit permission overwrites for members and roles
-    #[serde(default)]
-    permisson_overwrites: Vec<PermissonOverwrite>,
-
-    /// the name of the channel (2-100 characters)
-    name: Option<String>,
-
-    /// the channel topic (0-1024 characters)
-    topic: Option<String>,
-
-    /// whether the channel is nsfw
-    nsfw: Option<bool>,
-
-    /// the id of the last message sent in this channel (may not point to an existing or valid message)
+    name: String,
     last_message_id: Option<MessageId>,
-
-    /// the bitrate (int bits) of the voice channel
-    bitrate: Option<i32>,
-
-    /// the user limit of the voice channel
-    user_limit: Option<i32>,
-
-    /// amount of seconds a user has to wait before sending another message (0-21600);
-    /// bots, as well as users with the permission `manage_messages` or `manage_channel` are unaffected
-    rate_limit_per_user: Option<i32>,
-
-    /// the recipients of the DM
     recipients: Option<Vec<User>>,
-
-    /// icon hash
     icon: Option<String>,
-
-    /// the id of the DM creator
     owner_id: Option<UserId>,
-
-    /// application id of the group DM creator if it is bot-created
-    application_id: Option<ApplicationId>,
-
-    /// id of the parent category for a channel (each parent category can contain up to 50 channels)
-    parent_id: Option<ChannelId>,
-
-    /// when the last pinnded message was pinned
-    last_pin_timestamp: Option<DateTime<Utc>>,
 }
 
 /// Represents a guild's text channel
@@ -334,7 +295,9 @@ pub type TextChannelWrapper = ModelWrapper<TextChannel>;
 
 impl TextChannelWrapper {
     pub async fn send_message(&self, content: &str) -> Result<Message, Error> {
-        self.rest_client().create_message(*self.id(), content).await
+        self.rest_client()
+            .create_message(*self.id(), content, None)
+            .await
     }
 }
 

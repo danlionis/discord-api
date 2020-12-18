@@ -196,8 +196,8 @@ impl<'a> GatewayEventVisitor<'a> {
 impl<'de> Visitor<'de> for GatewayEventVisitor<'_> {
     type Value = GatewayEvent;
 
-    fn expecting(&self, _formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-        todo!()
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter.write_str("a GatewayEvent")
     }
 
     fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
@@ -250,11 +250,11 @@ impl<'de> Visitor<'de> for GatewayEventVisitor<'_> {
 #[derive(PartialEq, Clone, Debug, Serialize, Deserialize)]
 pub enum Event {
     Resume,
-    MessageCreate(Message),
-    MessageUpdate(MessageUpdate),
+    MessageCreate(Box<Message>),
+    MessageUpdate(Box<MessageUpdate>),
     MessageDelete(MessageDelete),
     MessageDeleteBulk(MessageDeleteBulk),
-    MessageReactionAdd(MessageReactionAdd),
+    MessageReactionAdd(Box<MessageReactionAdd>),
     MessageReactionRemove(MessageReactionRemove),
     MessageReactionRemoveAll(MessageReactionRemoveAll),
     MessageReactionRemoveEmoji(MessageReactionRemoveEmoji),
@@ -262,8 +262,8 @@ pub enum Event {
     ChannelDelete(Channel),
     ChannelUpdate(Channel),
     ChannelPinsUpdates(Channel),
-    GuildCreate(Guild),
-    GuildUpdate(Guild),
+    GuildCreate(Box<Guild>),
+    GuildUpdate(Box<Guild>),
     GuildDelete(UnavailableGuild),
     GuildBanAdd(GuildBanAdd),
     GuildEmojisUpdate(GuildEmojisUpdate),
@@ -361,7 +361,7 @@ impl<'de> DeserializeSeed<'de> for DispatchEventSeed<'_> {
             "CHANNEL_PINS_UPDATE" => Event::ChannelPinsUpdates(Channel::deserialize(deserializer)?),
             "GUILD_BAN_ADD" => Event::GuildBanAdd(GuildBanAdd::deserialize(deserializer)?),
             "GUILD_BAN_REMOVE" => Event::GuildBanRemove(GuildBanRemove::deserialize(deserializer)?),
-            "GUILD_CREATE" => Event::GuildCreate(Guild::deserialize(deserializer)?),
+            "GUILD_CREATE" => Event::GuildCreate(Box::new(Guild::deserialize(deserializer)?)),
             "GUILD_DELETE" => Event::GuildDelete(UnavailableGuild::deserialize(deserializer)?),
             "GUILD_EMOJIS_UPDATE" => {
                 Event::GuildEmojisUpdate(GuildEmojisUpdate::deserialize(deserializer)?)
@@ -390,14 +390,14 @@ impl<'de> DeserializeSeed<'de> for DispatchEventSeed<'_> {
             }
             "INVITE_CREATE" => Event::InviteCreate(InviteCreate::deserialize(deserializer)?),
             "INVITE_DELETE" => Event::InviteDelete(InviteDelete::deserialize(deserializer)?),
-            "GUILD_UPDATE" => Event::GuildUpdate(Guild::deserialize(deserializer)?),
-            "MESSAGE_CREATE" => Event::MessageCreate(Message::deserialize(deserializer)?),
+            "GUILD_UPDATE" => Event::GuildUpdate(Box::new(Guild::deserialize(deserializer)?)),
+            "MESSAGE_CREATE" => Event::MessageCreate(Box::new(Message::deserialize(deserializer)?)),
             "MESSAGE_DELETE" => Event::MessageDelete(MessageDelete::deserialize(deserializer)?),
             "MESSAGE_DELETE_BULK" => {
                 Event::MessageDeleteBulk(MessageDeleteBulk::deserialize(deserializer)?)
             }
             "MESSAGE_REACTION_ADD" => {
-                Event::MessageReactionAdd(MessageReactionAdd::deserialize(deserializer)?)
+                Event::MessageReactionAdd(Box::new(MessageReactionAdd::deserialize(deserializer)?))
             }
             "MESSAGE_REACTION_REMOVE" => {
                 Event::MessageReactionRemove(MessageReactionRemove::deserialize(deserializer)?)
@@ -405,7 +405,9 @@ impl<'de> DeserializeSeed<'de> for DispatchEventSeed<'_> {
             "MESSAGE_REACTION_REMOVE_ALL" => Event::MessageReactionRemoveAll(
                 MessageReactionRemoveAll::deserialize(deserializer)?,
             ),
-            "MESSAGE_UPDATE" => Event::MessageUpdate(MessageUpdate::deserialize(deserializer)?),
+            "MESSAGE_UPDATE" => {
+                Event::MessageUpdate(Box::new(MessageUpdate::deserialize(deserializer)?))
+            }
             "PRESENCE_UPDATE" => Event::PresenceUpdate(Presence::deserialize(deserializer)?),
             // "PRESENCES_REPLACE" => DispatchEvent::Unhandled,
             "TYPING_START" => Event::TypingStart(TypingStart::deserialize(deserializer)?),

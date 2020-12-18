@@ -56,6 +56,7 @@ impl<'de> Deserialize<'de> for Snowflake {
         D: serde::Deserializer<'de>,
     {
         deserializer.deserialize_any(SnowflakeVisitor)
+        // deserializer.deserialize_str(SnowflakeVisitor)
     }
 }
 
@@ -64,6 +65,7 @@ impl Serialize for Snowflake {
     where
         S: serde::Serializer,
     {
+        // serializer.serialize_str(&self.0.to_string())
         serializer.serialize_u64(self.0)
     }
 }
@@ -106,8 +108,8 @@ struct SnowflakeVisitor;
 
 impl<'de> Visitor<'de> for SnowflakeVisitor {
     type Value = Snowflake;
-    fn expecting(&self, _: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
-        todo!()
+    fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        formatter.write_str("a u64 snowflake")
     }
 
     fn visit_u64<E: serde::de::Error>(self, v: u64) -> Result<Self::Value, E> {

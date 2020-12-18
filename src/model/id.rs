@@ -63,5 +63,8 @@ impl_snowflake!(
     MessageId,
     RoleId,
     EmojiId,
-    AttachmentId
+    AttachmentId,
+    StickerId,
+    PackId,
+    WebhookId
 );

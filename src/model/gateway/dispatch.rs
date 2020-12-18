@@ -3,7 +3,6 @@ use crate::model::{
     Emoji, Presence, Role,
 };
 use crate::model::{GuildMember, PartialUser, User};
-use crate::Snowflake;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -13,7 +12,7 @@ pub struct Ready {
     pub version: u16,
     pub user: User,
     pub session_id: String,
-    pub shard: Option<(Snowflake, u16)>,
+    pub shard: Option<(u16, u16)>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone, Hash)]
@@ -45,7 +44,7 @@ pub struct GuildMemberUpdate {
 pub struct InviteCreate {
     channel_id: ChannelId,
     code: String,
-    created_at: u64,
+    created_at: DateTime<Utc>,
     guild_id: Option<GuildId>,
     intiver: Option<User>,
     max_age: i32,
