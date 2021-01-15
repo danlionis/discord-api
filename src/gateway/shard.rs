@@ -1,10 +1,14 @@
 use super::socket::GatewaySocket;
-use crate::error::{CloseCode, DiscordError, Error};
-use crate::model::gateway::command::{self, GatewayCommand};
-use crate::model::gateway::{Event, GatewayEvent, Hello, Ready};
-use crate::rest::RestClient;
-use futures::prelude::*;
-use std::time;
+use crate::{
+    error::{CloseCode, DiscordError, Error},
+    model::gateway::{
+        command::{self, GatewayCommand},
+        Event, GatewayEvent, Hello, Ready,
+    },
+    rest::RestClient,
+};
+use futures::{future::poll_fn, prelude::*, ready};
+use std::{task::Poll, time};
 use time::Duration;
 use tokio::{sync::mpsc, time::Interval};
 
@@ -84,9 +88,10 @@ impl Connection {
         self.send_event(Event::Ready(ready))?;
 
         loop {
+            let interval = self.heartbeat_interval.as_mut().unwrap();
             // select between the heartbeat interval and a new gateway event
             let select = futures::future::select(
-                self.heartbeat_interval.as_mut().unwrap().next(),
+                poll_fn(|mut cx| interval.poll_tick(&mut cx)),
                 self.socket.next(),
             );
 
@@ -140,7 +145,9 @@ impl Connection {
                             log::warn!("connection closed: {:?}", code);
                             self.reconnect(&gateway_url).await?;
                         }
-                        _ => {}
+                        _ => {
+                            panic!(code);
+                        }
                     };
                 }
                 future::Either::Right((Some(Err(err)), _)) => {
@@ -189,16 +196,38 @@ impl Connection {
         Ok((hello, ready))
     }
 
+    /// try reconnecting to the gatewy
+    pub async fn try_reconnect(&mut self, gateway_url: &str, max_retries: u16) -> Option<u64> {
+        let mut retries_left = max_retries;
+
+        while retries_left > 0 {
+            match self.reconnect(gateway_url).await {
+                Ok(heartbeat) => return Some(heartbeat),
+                Err(_) => {
+                    tokio::time::sleep(Duration::from_secs(1)).await;
+                    retries_left -= 1;
+                }
+            }
+        }
+
+        None
+    }
+
+    /// reconnect to the gateway
     pub async fn reconnect(&mut self, gateway_url: &str) -> Result<u64, Error> {
+        log::debug!("reconnecting");
         self.socket.reconnect(gateway_url).await?;
 
+        log::debug!("sending hello");
         let hello = match self.socket.next().await.unwrap().unwrap() {
             GatewayEvent::Hello(h) => h,
             _ => unreachable!("hello should be first packet to recieve"),
         };
+
+        log::debug!("sending resume");
         let resume = command::Resume {
             token: self.token.clone(),
-            session_id: self.session_id.cloned().unwrap(),
+            session_id: self.session_id.as_ref().unwrap().to_owned(),
             seq: self.seq,
         };
         self.socket.send(GatewayCommand::Resume(resume)).await?;
@@ -233,18 +262,18 @@ impl Connection {
     }
 }
 
-// impl Future for Connection {
-//     type Output = Result<(), Error>;
-//
-//     fn poll(
-//         mut self: std::pin::Pin<&mut Self>,
-//         cx: &mut std::task::Context<'_>,
-//     ) -> std::task::Poll<Self::Output> {
-//         unimplemented!()
-//     }
-// }
+impl Future for Connection {
+    type Output = Result<(), Error>;
 
-fn resume_payload(token: &str, session_id: &str, seq: u64) -> command::Resume {}
+    fn poll(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> Poll<Self::Output> {
+        let fut = self.run();
+        futures::pin_mut!(fut);
+        Poll::Ready(ready!(fut.poll(cx)))
+    }
+}
 
 pub struct Events {
     rx: mpsc::UnboundedReceiver<Event>,
@@ -261,6 +290,7 @@ impl Stream for Events {
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Option<Self::Item>> {
-        self.rx.poll_next_unpin(cx)
+        // self.rx.poll_next_unpin(cx)
+        self.rx.poll_recv(cx)
     }
 }

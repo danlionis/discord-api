@@ -1,10 +1,10 @@
+#![allow(dead_code)]
 //! Discord Library
 //!
 //! Features:
 //! - No additional dependencies (eg. async_trait)
 //! -
 
-#![allow(dead_code)]
 // extern crate chrono;
 // extern crate hyper;
 // extern crate hyper_tls;
@@ -12,7 +12,9 @@
 // extern crate serde;
 // extern crate serde_json;
 
+#[cfg(feature = "cache")]
 pub mod cache;
+
 pub mod error;
 pub mod gateway;
 pub mod model;

@@ -261,7 +261,7 @@ pub enum Event {
     ChannelCreate(Channel),
     ChannelDelete(Channel),
     ChannelUpdate(Channel),
-    ChannelPinsUpdates(Channel),
+    ChannelPinsUpdates(ChannelPinsUpdate),
     GuildCreate(Box<Guild>),
     GuildUpdate(Box<Guild>),
     GuildDelete(UnavailableGuild),
@@ -358,7 +358,9 @@ impl<'de> DeserializeSeed<'de> for DispatchEventSeed<'_> {
             "CHANNEL_CREATE" => Event::ChannelCreate(Channel::deserialize(deserializer)?),
             "CHANNEL_UPDATE" => Event::ChannelUpdate(Channel::deserialize(deserializer)?),
             "CHANNEL_DELETE" => Event::ChannelDelete(Channel::deserialize(deserializer)?),
-            "CHANNEL_PINS_UPDATE" => Event::ChannelPinsUpdates(Channel::deserialize(deserializer)?),
+            "CHANNEL_PINS_UPDATE" => {
+                Event::ChannelPinsUpdates(ChannelPinsUpdate::deserialize(deserializer)?)
+            }
             "GUILD_BAN_ADD" => Event::GuildBanAdd(GuildBanAdd::deserialize(deserializer)?),
             "GUILD_BAN_REMOVE" => Event::GuildBanRemove(GuildBanRemove::deserialize(deserializer)?),
             "GUILD_CREATE" => Event::GuildCreate(Box::new(Guild::deserialize(deserializer)?)),

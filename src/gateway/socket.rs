@@ -40,12 +40,12 @@ impl GatewaySocket {
     /// This method sends an appropriate CloseCode so that the gateway knows we want to close the
     /// session. The gateway session will be invalidated
     pub async fn close(&mut self) -> Result<(), WsError> {
-        if let Some(mut s) = self.inner.take() {
+        if let Some(s) = self.inner.take() {
             let close_frame = CloseFrame {
                 code: WsCloseCode::Normal,
                 reason: "".into(),
             };
-            s.close(Some(close_frame)).await?
+            close_stream(s, Some(close_frame)).await?;
         }
         log::debug!("websocket connection closed");
         Ok(())
@@ -53,8 +53,8 @@ impl GatewaySocket {
 
     /// close the current connection if it exisits and reconnect keeping sessions active
     pub async fn reconnect(&mut self, gateway_url: &str) -> Result<(), WsError> {
-        if let Some(mut s) = self.inner.take() {
-            s.close(None).await?
+        if let Some(s) = self.inner.take() {
+            close_stream(s, None).await?;
         }
         self.connect(gateway_url).await
     }
@@ -140,4 +140,17 @@ impl Sink<GatewayCommand> for GatewaySocket {
 
         stream.poll_close_unpin(cx)
     }
+}
+
+/// Close the stream if it is not already closed
+async fn close_stream<'a>(
+    mut s: WebSocketStream<AutoStream<TcpStream>>,
+    close_frame: Option<CloseFrame<'a>>,
+) -> Result<(), WsError> {
+    match s.close(close_frame).await {
+        Ok(_) | Err(WsError::AlreadyClosed) => {}
+        Err(err) => return Err(err),
+    }
+
+    Ok(())
 }
