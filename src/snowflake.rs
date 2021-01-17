@@ -5,7 +5,8 @@ use std::str::FromStr;
 
 /// The `Snowflake` type is used for uniqely identifiable descriptors (IDs) across Discord
 ///
-/// A `Snowflake` is represented by a `u64`
+/// A `Snowflake` is represented by a `u64` and will be serialized as such up to JavaScripts
+/// NUMBER.MAX_SAFE_INTEGER. Larger values will be serialized as a `String`
 ///
 /// [Reference]
 ///
@@ -60,13 +61,19 @@ impl<'de> Deserialize<'de> for Snowflake {
     }
 }
 
+const MAX_SAFE_INTEGER: u64 = (2 << 52) - 1;
+
 impl Serialize for Snowflake {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
     {
-        // serializer.serialize_str(&self.0.to_string())
-        serializer.serialize_u64(self.0)
+        let v = self.0;
+        if v > MAX_SAFE_INTEGER {
+            serializer.serialize_str(&self.0.to_string())
+        } else {
+            serializer.serialize_u64(self.0)
+        }
     }
 }
 
@@ -120,5 +127,29 @@ impl<'de> Visitor<'de> for SnowflakeVisitor {
         v.parse::<u64>()
             .map(Snowflake)
             .map_err(|_| serde::de::Error::custom("unknown value"))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_test::{assert_tokens, Token};
+
+    #[test]
+    fn safe_integer() {
+        let safe_int = Snowflake::from(123);
+        assert_tokens(&safe_int, &[Token::U64(123)]);
+    }
+
+    #[test]
+    fn max_safe_integer() {
+        let max_safe_int = Snowflake::from(MAX_SAFE_INTEGER);
+        assert_tokens(&max_safe_int, &[Token::U64(9007199254740991)]);
+    }
+
+    #[test]
+    fn unsafe_integer() {
+        let unsafe_int = Snowflake::from(MAX_SAFE_INTEGER + 1);
+        assert_tokens(&unsafe_int, &[Token::String("9007199254740992")]);
     }
 }
