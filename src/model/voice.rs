@@ -5,30 +5,30 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Hash, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct VoiceState {
     /// the guild id this voice state is for
-    guild_id: Option<GuildId>,
+    pub guild_id: Option<GuildId>,
     /// the channel id this user is connected to
-    channel_id: Option<ChannelId>,
+    pub channel_id: Option<ChannelId>,
     /// the user id this voice state is for
-    user_id: UserId,
+    pub user_id: UserId,
     /// the guild member this voice state is for
-    member: Option<GuildMember>,
+    pub member: Option<GuildMember>,
     /// the session id for this voice state
-    session_id: String,
+    pub session_id: String,
     /// whether this user is deafened by the server
     #[serde(rename = "deaf")]
-    server_deaf: bool,
+    pub server_deaf: bool,
     /// whether this user is muted by the server
     #[serde(rename = "mute")]
-    server_mute: bool,
+    pub server_mute: bool,
     /// whether this user is locally deafened
-    self_mute: bool,
+    pub self_mute: bool,
     /// whether this user is locally muted
-    self_deaf: bool,
+    pub self_deaf: bool,
     /// whether this user is streaming using "Go Live"
     #[serde(default)]
-    self_stream: bool,
+    pub self_stream: bool,
     /// whether this user's camera is enabled
-    self_video: bool,
+    pub self_video: bool,
     /// whether this user is muted by the current user
-    suppress: bool,
+    pub suppress: bool,
 }
