@@ -97,50 +97,50 @@ pub struct MessageUpdate {
 
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone, Hash)]
 pub struct MessageDelete {
-    id: MessageId,
-    channel_id: ChannelId,
-    guild_id: Option<GuildId>,
+    pub id: MessageId,
+    pub channel_id: ChannelId,
+    pub guild_id: Option<GuildId>,
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug, Deserialize, Serialize)]
 pub struct Reaction {
     /// times this emoji has been used to react
-    count: i32,
+    pub count: i32,
     /// whether the current user reacted using this emoji
-    me: bool,
+    pub me: bool,
     /// emoji information
-    emoji: Emoji,
+    pub emoji: Emoji,
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug, Deserialize, Serialize)]
 pub struct ChannelMention {
     /// id of the channel
-    id: ChannelId,
+    pub id: ChannelId,
     /// id of the guild containing the channel
-    guild_id: GuildId,
+    pub guild_id: GuildId,
     /// the type of the channel
     #[serde(rename = "type")]
-    kind: i32,
+    pub kind: i32,
     /// the name of the channel
-    name: String,
+    pub name: String,
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug, Deserialize, Serialize)]
 pub struct Attachment {
     /// attachment id
-    id: AttachmentId,
+    pub id: AttachmentId,
     /// name of file attached
-    filename: String,
+    pub filename: String,
     /// size of the file in bytes
-    size: i32,
+    pub size: i32,
     /// source url of the file
-    url: String,
+    pub url: String,
     /// a proxied url of file
-    proxy_url: String,
+    pub proxy_url: String,
     /// height of file (if image)
-    height: Option<i32>,
+    pub height: Option<i32>,
     /// width of file (if image)
-    width: Option<i32>,
+    pub width: Option<i32>,
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug, Deserialize, Serialize)]
@@ -151,45 +151,45 @@ pub struct MessageActivity {
     /// LISTEN: 3
     /// JOIN_REQUEST: 3
     #[serde(rename = "type")]
-    kind: i32,
+    pub kind: i32,
     /// Party ID from a Rich Presence Event
-    party_id: Option<String>,
+    pub party_id: Option<String>,
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug, Deserialize, Serialize)]
 pub struct Application {
     /// id of the application
-    id: ApplicationId,
+    pub id: ApplicationId,
     /// id of the embed's image asset
-    cover_image: Option<String>,
+    pub cover_image: Option<String>,
     /// application's description
-    description: String,
+    pub description: String,
     /// id of the application's icon
-    icon: Option<String>,
+    pub icon: Option<String>,
     /// name of the application
-    name: String,
+    pub name: String,
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug, Deserialize, Serialize)]
 pub struct MessageReference {
     /// id of the originating message
-    message_id: Option<MessageId>,
+    pub message_id: Option<MessageId>,
     /// id of the originating message's channel
-    channel_id: Option<ChannelId>,
+    pub channel_id: Option<ChannelId>,
     /// id of the originating message's guild
-    guild_id: Option<GuildId>,
+    pub guild_id: Option<GuildId>,
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug, Deserialize, Serialize)]
 pub struct MessageSticker {
-    id: StickerId,
-    pack_id: PackId,
-    name: String,
-    description: String,
-    tags: Option<String>,
-    asset: String,
-    preview_asset: Option<String>,
-    format_type: MessageStickerFormat,
+    pub id: StickerId,
+    pub pack_id: PackId,
+    pub name: String,
+    pub description: String,
+    pub tags: Option<String>,
+    pub asset: String,
+    pub preview_asset: Option<String>,
+    pub format_type: MessageStickerFormat,
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug, DeserializeRepr, SerializeRepr)]
