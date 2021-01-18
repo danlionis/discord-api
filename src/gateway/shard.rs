@@ -103,18 +103,6 @@ impl Connection {
                     GatewayEvent::Dispatch(seq, e) => {
                         log::debug!("dispatch event= {}", e.kind());
                         self.seq = seq;
-                        match &e {
-                            Event::MessageCreate(m) => {
-                                if m.content.as_str() == "reconnect" {
-                                    self.reconnect(&gateway_url).await?;
-                                }
-                                if m.content.as_str() == "dc" {
-                                    self.socket.close().await?;
-                                    break;
-                                }
-                            }
-                            _ => {}
-                        }
                         self.send_event(e)?;
                     }
                     GatewayEvent::Heartbeat(_) => {
