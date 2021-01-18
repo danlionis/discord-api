@@ -29,13 +29,13 @@ pub struct Guild {
     /// id of the afk channel
     pub afk_channel_id: Option<ChannelId>,
     /// afk timeout in seconds
-    pub afk_timeout: u32,
+    pub afk_timeout: i32,
     /// verification level required for the guild
-    pub verification_level: u32,
+    pub verification_level: i32,
     /// default message notification level
-    pub default_message_notifications: u32,
+    pub default_message_notifications: i32,
     /// explicit content filter level
-    pub explicit_content_filter: u32,
+    pub explicit_content_filter: i32,
     /// roles in the guild
     pub roles: Vec<Role>,
     /// custom guild emojis
@@ -43,7 +43,7 @@ pub struct Guild {
     /// enabled guild features
     pub features: Vec<GuildFeature>,
     /// required MFA level for the guild
-    pub mfa_level: u32,
+    pub mfa_level: i32,
     /// application id of the guild creator if it is bot-created
     pub application_id: Option<ApplicationId>,
     /// true if the server widget is enabled
@@ -53,7 +53,7 @@ pub struct Guild {
     /// the id of the channel where guild notices such as welcome messages and boost events are posted
     pub system_channel_id: Option<ChannelId>,
     /// system channel flags
-    pub system_channel_flags: u32,
+    pub system_channel_flags: i32,
     /// the id of the channel where guild with the `PUBLIC` feature can display rules and/or guidelines
     pub rules_channel_id: Option<ChannelId>,
     /// when this guild was joined at (only with the `GUILD_CREATE` event)
@@ -61,7 +61,7 @@ pub struct Guild {
     /// true if this guild is unavailable due to an outage (only with the `GUILD_CREATE` event
     pub unavailable: Option<bool>,
     /// total number of members in this guild (only with the `GUILD_CREATE` event
-    pub member_count: Option<u32>,
+    pub member_count: Option<i32>,
     /// states of members currently in voice channels; lacks the guild_id key
     pub voice_states: Vec<VoiceState>,
     /// users in the guild
@@ -70,9 +70,9 @@ pub struct Guild {
     pub channels: Vec<Channel>,
     /// presences of the members in the guild, will only include non-offline members if the size is greater than `large_threshold`
     pub presences: Vec<Presence>,
-    pub max_presences: Option<u32>,
+    pub max_presences: Option<i32>,
     /// the maximum number of members for the guild
-    pub max_members: u32,
+    pub max_members: i32,
     /// the vanity url code for the guild
     pub vanity_url_code: Option<String>,
     /// the description for the guild, if the guild is discoverable
@@ -82,17 +82,17 @@ pub struct Guild {
     /// premium tier (Server boost level)
     pub premium_tier: u8,
     /// the number of boosts this guild currently has
-    pub premium_subscription_count: Option<u32>,
+    pub premium_subscription_count: Option<i32>,
     /// the preffered locale of a guild with the `PUBLIC` feature; used in server discovery and notices from Discord
     pub preferred_locale: String,
     /// the id of the channel where admins and moderators of guild with the `PUBLIC` feature recieve notices from Discord
     pub public_updates_channel_id: Option<ChannelId>,
     /// the maximum amount of users in a video channel
-    pub max_video_channel_users: Option<u32>,
+    pub max_video_channel_users: Option<i32>,
     /// approximate number of members in this guild
-    pub approximate_member_count: Option<u32>,
+    pub approximate_member_count: Option<i32>,
     /// approximate number of non-offline members in this guild
-    pub approximate_presence_count: Option<u32>,
+    pub approximate_presence_count: Option<i32>,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Deserialize, Serialize)]

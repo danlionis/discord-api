@@ -30,23 +30,23 @@ pub struct EmbedFooter {
 pub struct EmbedImage {
     url: Option<String>,
     proxy_url: Option<String>,
-    height: Option<u32>,
-    width: Option<u32>,
+    height: Option<i32>,
+    width: Option<i32>,
 }
 
 #[derive(Clone, Hash, Eq, PartialEq, Serialize, Deserialize, Debug)]
 pub struct EmbedThumbnail {
     url: Option<String>,
     proxy_url: Option<String>,
-    height: Option<u32>,
-    width: Option<u32>,
+    height: Option<i32>,
+    width: Option<i32>,
 }
 
 #[derive(Clone, Hash, Eq, PartialEq, Serialize, Deserialize, Debug)]
 pub struct EmbedVideo {
     url: Option<String>,
-    height: Option<u32>,
-    width: Option<u32>,
+    height: Option<i32>,
+    width: Option<i32>,
 }
 
 #[derive(Clone, Hash, Eq, PartialEq, Serialize, Deserialize, Debug)]
