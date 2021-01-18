@@ -19,11 +19,8 @@ pub struct ClientStatus {
 pub struct Presence {
     pub user: PartialUser,
     #[serde(default)]
-    pub roles: Vec<RoleId>,
     pub guild_id: Option<GuildId>,
     pub status: String,
     pub activities: Vec<Activity>,
     pub client_status: ClientStatus,
-    pub premium_since: Option<DateTime<Utc>>,
-    pub nick: Option<String>,
 }
