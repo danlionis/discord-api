@@ -1,3 +1,7 @@
+#![allow(missing_docs)]
+
+//! Concrete ID Types for all IDs that are based on `Snowflake`
+
 use crate::Snowflake;
 use serde::{Deserialize, Serialize};
 
@@ -49,6 +53,13 @@ macro_rules! impl_snowflake {
         impl std::convert::AsRef<u64> for $name {
             fn as_ref(&self) -> &u64 {
                 &self
+            }
+        }
+
+        impl std::str::FromStr for $name {
+            type Err = std::num::ParseIntError;
+            fn from_str(s: &str) -> Result<Self, Self::Err> {
+                Ok(Self(Snowflake::from_str(s)?))
             }
         }
         )*

@@ -13,9 +13,14 @@ use tungstenite::{
 const GATEWAY_VERSION: u16 = 8;
 
 /// `GatewaySocket` forwards GatewayEvents from and to the Gateway
-///
 pub struct GatewaySocket {
     inner: Option<WebSocketStream<AutoStream<TcpStream>>>,
+}
+
+impl std::fmt::Debug for GatewaySocket {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("GatewaySocket").finish()
+    }
 }
 
 impl GatewaySocket {
@@ -89,7 +94,7 @@ impl Stream for GatewaySocket {
                     .map(|close| CloseCode::from(close.code))
                     .unwrap_or_else(|| CloseCode::UnknownError);
 
-                Poll::Ready(Some(Err(Error::GatewayClosed(code))))
+                Poll::Ready(Some(Err(Error::GatewayClosed(Some(code)))))
             }
             Poll::Ready(Some(Err(err))) => Poll::Ready(Some(Err(err.into()))),
             Poll::Ready(Some(other)) => {

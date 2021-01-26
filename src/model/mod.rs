@@ -1,3 +1,5 @@
+//! Models for every type received and sent to the Discord API
+
 mod message;
 mod presence;
 mod user;

@@ -27,8 +27,16 @@ pub fn channel_messages(id: u64) -> String {
     api!("/channels/{}/messages", id)
 }
 
+pub fn user_dm() -> String {
+    api!("/users/@me/channels").to_owned()
+}
+
 pub fn text_message(id: u64, message_id: u64) -> String {
     api!("/channels/{}/messages/{}", id, message_id)
+}
+
+pub fn trigger_typing_indicator(channel_id: u64) -> String {
+    api!("/channels/{}/typing", channel_id)
 }
 
 pub fn gateway() -> String {

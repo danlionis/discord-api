@@ -21,7 +21,7 @@ pub enum GatewayEvent {
 }
 
 impl GatewayEvent {
-    pub fn opcode(&self) -> Opcode {
+    pub(crate) fn opcode(&self) -> Opcode {
         Opcode::from(self)
     }
 }
@@ -59,11 +59,7 @@ impl<'a> GatewayEventSeed<'a> {
             None
         };
 
-        GatewayEventSeed {
-            op,
-            seq,
-            event_kind,
-        }
+        GatewayEventSeed::new(op, seq, event_kind)
     }
 
     /// parse the event kind out of the json string
@@ -196,7 +192,7 @@ impl<'a> GatewayEventVisitor<'a> {
 impl<'de> Visitor<'de> for GatewayEventVisitor<'_> {
     type Value = GatewayEvent;
 
-    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter.write_str("a GatewayEvent")
     }
 

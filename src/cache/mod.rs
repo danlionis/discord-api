@@ -1,3 +1,5 @@
+//! cache events for later access
+
 use crate::model::gateway::Event;
 use crate::model::{id::MessageId, Message};
 use dashmap::DashMap;

@@ -1,3 +1,4 @@
+/// Intent Bits
 pub type Intents = u32;
 
 /// GUILDS (1 << 0)

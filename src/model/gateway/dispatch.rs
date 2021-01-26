@@ -15,12 +15,18 @@ pub struct Ready {
     pub shard: Option<(u16, u16)>,
 }
 
+/// Sent when a user starts typing in a channel
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone, Hash)]
 pub struct TypingStart {
+    /// id of the channel
     pub channel_id: ChannelId,
+    /// id of the guild
     pub guild_id: Option<GuildId>,
+    /// id of the user
     pub user_id: UserId,
+    /// unix time (in seconds) of when the user started typing
     pub timestamp: u64,
+    /// the member who started typing if this happened in a guild
     pub member: Option<GuildMember>,
 }
 
@@ -164,15 +170,23 @@ pub struct MessageReactionRemoveEmoji {
     pub emoji: Emoji,
 }
 
+/// Sent when a guild's voice server is updated. This is sent when initially connecting to voice,
+/// and when the current voice instance fails over to a new server.
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone)]
 pub struct VoiceServerUpdate {
+    /// voice connection token
     pub token: String,
+    /// the guild this voice server update is for
     pub guild_id: GuildId,
+    /// the voice server host
     pub endpoint: String,
 }
 
+/// Sent when a guild channel's webhook is created, updated, or deleted
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone)]
 pub struct WebhooksUpdate {
+    /// id of the guild
     pub guild_id: GuildId,
+    /// id of the channel
     pub channel_id: ChannelId,
 }

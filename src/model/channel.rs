@@ -4,6 +4,7 @@ use crate::model::{
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use std::{convert::TryFrom, ops::Deref};
 
 /// Represents the most general channel type within Discord
 ///
@@ -68,6 +69,16 @@ pub struct Channel {
     pub last_pin_timestamp: Option<DateTime<Utc>>,
 }
 
+impl AsRef<ChannelId> for Channel {
+    fn as_ref(&self) -> &ChannelId {
+        &self.id
+    }
+}
+
+/// Error when trying to cast a Channel
+#[derive(Debug)]
+pub struct InvalidChannelType;
+
 #[derive(Debug, Eq, PartialEq, Clone, Copy, Hash)]
 #[repr(u8)]
 pub enum ChannelType {
@@ -114,3 +125,38 @@ impl Serialize for ChannelType {
         serializer.serialize_u8(*self as u8)
     }
 }
+
+macro_rules! impl_concrete_channel {
+    ($name:ident, $t:expr) => {
+        #[derive(Clone, PartialEq, Eq, Hash, Debug, Deserialize, Serialize)]
+        #[allow(missing_docs)]
+        pub struct $name(Channel);
+
+        impl TryFrom<Channel> for $name {
+            type Error = InvalidChannelType;
+
+            fn try_from(c: Channel) -> Result<Self, Self::Error> {
+                if c.kind != $t {
+                    return Err(InvalidChannelType);
+                }
+                Ok($name(c))
+            }
+        }
+
+        impl Deref for $name {
+            type Target = Channel;
+
+            fn deref(&self) -> &Self::Target {
+                &self.0
+            }
+        }
+    };
+}
+
+impl_concrete_channel!(GuildTextChannel, ChannelType::GuildText);
+impl_concrete_channel!(GuildVoiceChannel, ChannelType::GuildVoice);
+impl_concrete_channel!(GuildStoreChannel, ChannelType::GuildStore);
+impl_concrete_channel!(GuildCategoryChannel, ChannelType::GuildCategory);
+impl_concrete_channel!(GuildNewsChannel, ChannelType::GuildNews);
+impl_concrete_channel!(DMChannel, ChannelType::DM);
+impl_concrete_channel!(GroupDMChannel, ChannelType::GroupDM);

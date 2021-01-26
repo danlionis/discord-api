@@ -63,12 +63,16 @@ pub struct Guild {
     /// total number of members in this guild (only with the `GUILD_CREATE` event
     pub member_count: Option<i32>,
     /// states of members currently in voice channels; lacks the guild_id key
+    #[serde(default)]
     pub voice_states: Vec<VoiceState>,
     /// users in the guild
+    #[serde(default)]
     pub members: Vec<GuildMember>,
     /// channels in the guild
+    #[serde(default)]
     pub channels: Vec<Channel>,
     /// presences of the members in the guild, will only include non-offline members if the size is greater than `large_threshold`
+    #[serde(default)]
     pub presences: Vec<Presence>,
     pub max_presences: Option<i32>,
     /// the maximum number of members for the guild

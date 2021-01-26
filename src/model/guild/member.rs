@@ -12,7 +12,7 @@ pub struct GuildMember {
     pub user: Option<User>,
     /// the users guild nickname
     pub nick: Option<String>,
-    /// array of [`Role`] object ids
+    /// array of [`RoleId`](../id/struct.RoleId.html)s
     pub roles: Vec<RoleId>,
     /// when the user joined the guild
     pub joined_at: DateTime<Utc>,

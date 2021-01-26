@@ -5,6 +5,7 @@ use crate::model::Activity;
 use serde::ser::SerializeStruct;
 use serde::Serialize;
 
+#[derive(Debug)]
 pub enum GatewayCommand {
     /// triggers the initial handshake with the gateway
     Identify(Identify),
@@ -25,7 +26,7 @@ pub enum GatewayCommand {
     UpdateStatus(UpdateStatus),
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 pub struct Identify {
     /// authentication token
     pub token: String,
@@ -69,7 +70,7 @@ impl Identify {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 pub struct ConnectionProperties {
     #[serde(rename = "$os")]
     pub os: String,
@@ -79,7 +80,7 @@ pub struct ConnectionProperties {
     pub device: String,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 pub struct UpdateStatus {
     /// unix time (in milliseconds) of when the client went idle, or `None` if the client is not
     /// idle
@@ -87,7 +88,7 @@ pub struct UpdateStatus {
 
     /// `None`, or the user's activities
     #[serde(default)]
-    pub activities: Vec<Activity>,
+    pub activities: Option<Vec<Activity>>,
 
     /// the user's new status
     pub status: String,
@@ -96,14 +97,14 @@ pub struct UpdateStatus {
     pub afk: bool,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 pub struct Resume {
     pub token: String,
     pub session_id: String,
     pub seq: u64,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 pub struct RequestGuildMembers {
     /// id of the guild to get members for
     pub guild_id: GuildId,
@@ -125,7 +126,7 @@ pub struct RequestGuildMembers {
     pub nonce: Option<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 pub struct UpdateVoiceState {
     pub guild_id: GuildId,
     pub channel_id: Option<ChannelId>,
@@ -134,7 +135,7 @@ pub struct UpdateVoiceState {
 }
 
 impl GatewayCommand {
-    pub fn opcode(&self) -> Opcode {
+    pub(crate) fn opcode(&self) -> Opcode {
         Opcode::from(self)
     }
 }

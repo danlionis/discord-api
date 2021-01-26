@@ -1,9 +1,4 @@
-#![allow(dead_code)]
-//! Discord Library
-//!
-//! Features:
-//! - No additional dependencies (eg. async_trait)
-//! -
+//! Low Level Discord Library
 
 // extern crate chrono;
 // extern crate hyper;
@@ -12,6 +7,13 @@
 // extern crate serde;
 // extern crate serde_json;
 
+#![warn(
+    missing_docs,
+    rust_2018_idioms,
+    missing_debug_implementations,
+    broken_intra_doc_links
+)]
+
 #[cfg(feature = "cache")]
 pub mod cache;
 
@@ -19,17 +21,9 @@ pub mod error;
 pub mod gateway;
 pub mod model;
 pub mod rest;
-pub mod traits;
-pub mod wrapper;
+pub mod util;
 
 mod snowflake;
 
+pub use error::Error;
 pub use snowflake::Snowflake;
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
-    }
-}

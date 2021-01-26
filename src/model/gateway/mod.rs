@@ -8,4 +8,4 @@ mod opcode;
 pub use command::*;
 pub use dispatch::*;
 pub use event::*;
-pub use opcode::Opcode;
+pub(crate) use opcode::Opcode;

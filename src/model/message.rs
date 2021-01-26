@@ -1,13 +1,17 @@
 use super::embed::Embed;
 use super::guild::GuildMember;
 use super::user::User;
-use crate::error::Error;
-use crate::model::emoji::Emoji;
-use crate::model::id::{
-    ApplicationId, AttachmentId, ChannelId, GuildId, MessageId, PackId, RoleId, StickerId,
-    WebhookId,
+use crate::{
+    error::Error,
+    model::{
+        emoji::Emoji,
+        id::{
+            ApplicationId, AttachmentId, ChannelId, GuildId, MessageId, PackId, RoleId, StickerId,
+            WebhookId,
+        },
+    },
+    util::RestWrapper,
 };
-use crate::wrap_model;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr as DeserializeRepr, Serialize_repr as SerializeRepr};
@@ -73,6 +77,29 @@ pub struct Message {
     pub stickers: Vec<MessageSticker>,
     /// the message associated with the message_reference
     pub referenced_message: Option<Box<Message>>,
+}
+
+impl Message {
+    /// `MessageReference` for this `Message`
+    pub fn reference(&self) -> MessageReference {
+        MessageReference {
+            message_id: Some(self.id),
+            channel_id: Some(self.channel_id),
+            guild_id: self.guild_id,
+        }
+    }
+}
+
+impl AsRef<MessageId> for Message {
+    fn as_ref(&self) -> &MessageId {
+        &self.id
+    }
+}
+
+impl AsRef<ChannelId> for Message {
+    fn as_ref(&self) -> &ChannelId {
+        &self.channel_id
+    }
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug, Deserialize, Serialize)]
@@ -200,16 +227,10 @@ pub enum MessageStickerFormat {
     LOTTIE = 3,
 }
 
-wrap_model!(pub MessageWrapper, Message);
-
-impl MessageWrapper {
+impl RestWrapper<Message> {
     /// Send a message in the same text channel as the original message
     pub async fn reply(&self, content: impl AsRef<str>) -> Result<Message, Error> {
-        let reference = MessageReference {
-            message_id: Some(self.id),
-            channel_id: Some(self.channel_id),
-            guild_id: self.guild_id,
-        };
+        let reference = self.reference();
         self.rest_client()
             .create_message(self.channel_id, content.as_ref(), Some(reference))
             .await

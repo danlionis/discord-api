@@ -1,72 +1,147 @@
 use super::socket::GatewaySocket;
 use crate::{
-    error::{CloseCode, DiscordError, Error},
+    error::{DiscordError, Error},
     model::gateway::{
         command::{self, GatewayCommand},
         Event, GatewayEvent, Hello, Ready,
     },
     rest::RestClient,
 };
-use futures::{future::poll_fn, prelude::*, ready};
-use std::{task::Poll, time};
+use futures::{future::poll_fn, future::Either, prelude::*};
+use std::{
+    future::Future,
+    pin::Pin,
+    sync::{Arc, RwLock},
+    task::{Context, Poll},
+    time::{self, Instant},
+};
 use time::Duration;
 use tokio::{sync::mpsc, time::Interval};
 
+/// Event handler
+#[derive(Debug)]
 pub struct Shard {
     token: String,
     rest_client: RestClient,
+    rx: mpsc::UnboundedReceiver<Event>,
+    state: Arc<RwLock<SharedConnState>>,
+}
+
+/// creates a new pair of `Shard` and a `ConnectionFut`
+///
+/// The `ConnectionFut` has to be spawned onto a runtime in order to connect to the gateway.
+///
+/// The `Shard` can be used to receive Events from and send Commands to the Gateway.
+pub fn new(token: &str) -> (Shard, Connection) {
+    with_rest_client(token, RestClient::new(token))
+}
+
+/// same as `gateway::new` but does not create a new RestClient
+pub fn with_rest_client(token: &str, rest_client: RestClient) -> (Shard, Connection) {
+    let (e_tx, e_rx) = mpsc::unbounded_channel();
+
+    let state = Arc::new(RwLock::new(SharedConnState { ping: None }));
+
+    let shard = Shard {
+        token: token.to_owned(),
+        rest_client: rest_client.clone(),
+        rx: e_rx,
+        state: Arc::clone(&state),
+    };
+
+    let conn = ConnectionImpl {
+        token: token.to_owned(),
+        rest_client: rest_client.clone(),
+        seq: 0,
+        session_id: None,
+        tx: e_tx,
+        socket: GatewaySocket::new(),
+        heartbeat_interval: None,
+        hearbeat_ackd: true,
+        state,
+    };
+
+    (shard, Connection::new(conn))
 }
 
 impl Shard {
-    pub fn new(token: &str) -> Self {
-        Self::with_rest_client(token, RestClient::new(token))
+    /// Ping to the gateway. `None` if not connected
+    pub fn ping(&self) -> Option<u128> {
+        self.state.read().unwrap().ping
     }
 
-    pub fn with_rest_client(token: &str, rest_client: RestClient) -> Self {
-        Shard {
-            token: token.to_string(),
-            rest_client,
-        }
+    /// Receive an Event
+    ///
+    /// returns `None` if the Connection has terminated
+    pub async fn recv_event(&mut self) -> Option<Event> {
+        poll_fn(|cx| self.poll_recv_event(cx)).await
     }
 
-    pub fn connection(&self) -> (Connection, Events) {
-        let (tx, rx) = mpsc::unbounded_channel();
-        let conn = Connection {
-            token: self.token.to_owned(),
-            rest_client: self.rest_client.clone(),
-            seq: 0,
-            session_id: None,
-            running_since: None,
-            event_sender: tx,
-            socket: GatewaySocket::new(),
-            heartbeat_interval: None,
-            hearbeat_ackd: true,
-        };
-
-        let events = Events { rx };
-
-        (conn, events)
+    /// Poll for the next Event
+    ///
+    /// returns `None` if the Connection has terminated
+    pub fn poll_recv_event(&mut self, cx: &mut Context<'_>) -> Poll<Option<Event>> {
+        self.rx.poll_recv(cx)
     }
 }
 
-pub struct Connection {
-    pub token: String,
-    pub rest_client: RestClient,
-    pub seq: u64,
-    pub running_since: Option<time::Instant>,
-    pub session_id: Option<String>,
-    pub event_sender: mpsc::UnboundedSender<Event>,
-    pub socket: GatewaySocket,
-    pub heartbeat_interval: Option<Interval>,
-    pub hearbeat_ackd: bool,
+impl Stream for Shard {
+    type Item = Event;
+
+    fn poll_next(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<Self::Item>> {
+        self.poll_recv_event(cx)
+    }
 }
+
+/// Future that handles the connection
+///
+/// Spawning this Future will connect to the gateway, start heartbeating and forward Events to the
+/// Shard
+#[allow(missing_debug_implementations)]
+#[must_use = "connection must be started with `.await` or polled"]
+pub struct Connection(Pin<Box<dyn Future<Output = Result<(), Error>> + Send>>);
 
 impl Connection {
-    /// Initiate the connection and start recieving events
-    ///
-    /// This function has to be awaited in order to run it
-    /// and only returns, if there is an error or the connection stops
-    pub async fn run(&mut self) -> Result<(), Error> {
+    fn new(conn: ConnectionImpl) -> Self {
+        Connection(Box::pin(conn.start()))
+    }
+}
+
+impl Future for Connection {
+    type Output = Result<(), Error>;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> Poll<Self::Output> {
+        self.0.as_mut().poll(cx)
+    }
+}
+
+/// State shared between a Shard and its Connection
+#[derive(Debug)]
+struct SharedConnState {
+    /// ping from the last heartbeat, `None` if not connected
+    pub ping: Option<u128>,
+}
+
+/// TODO: docs
+#[derive(Debug)]
+struct ConnectionImpl {
+    token: String,
+    rest_client: RestClient,
+    seq: u64,
+    session_id: Option<String>,
+    tx: mpsc::UnboundedSender<Event>,
+    socket: GatewaySocket,
+    heartbeat_interval: Option<Interval>,
+    hearbeat_ackd: bool,
+    state: Arc<RwLock<SharedConnState>>,
+}
+
+impl ConnectionImpl {
+    /// Start the connection and start recieving events
+    async fn start(mut self) -> Result<(), Error> {
         let mut gateway_url = self
             .rest_client
             .get_gateway()
@@ -83,9 +158,9 @@ impl Connection {
         log::debug!("heartbeat interval: {}s", hello.heartbeat_interval / 1000);
         self.session_id = Some(ready.session_id.clone());
 
-        self.running_since = Some(time::Instant::now());
-
         self.send_event(Event::Ready(ready))?;
+
+        let mut last_heartbeat = None;
 
         loop {
             let interval = self.heartbeat_interval.as_mut().unwrap();
@@ -96,10 +171,11 @@ impl Connection {
             );
 
             match select.await {
-                future::Either::Left(_) => {
+                Either::Left(_) => {
+                    last_heartbeat = Some(Instant::now());
                     self.heartbeat().await;
                 }
-                future::Either::Right((Some(Ok(event)), _)) => match event {
+                Either::Right((Some(Ok(event)), _)) => match event {
                     GatewayEvent::Dispatch(seq, e) => {
                         log::debug!("dispatch event= {}", e.kind());
                         self.seq = seq;
@@ -124,36 +200,32 @@ impl Connection {
                     GatewayEvent::Hello(_hello) => {}
                     GatewayEvent::HeartbeatAck => {
                         self.hearbeat_ackd = true;
+                        self.state.write().unwrap().ping =
+                            Some(last_heartbeat.unwrap().elapsed().as_millis());
                         log::trace!("heartbeat ack");
                     }
                 },
-                future::Either::Right((Some(Err(Error::GatewayClosed(code))), _)) => {
-                    match code {
-                        CloseCode::UnknownError | CloseCode::SessionTimedOut => {
-                            log::warn!("connection closed: {:?}", code);
-                            self.reconnect(&gateway_url).await?;
-                        }
-                        _ => {
-                            panic!(code);
-                        }
-                    };
+                Either::Right((Some(Err(Error::GatewayClosed(code))), _)) => {
+                    log::warn!("connection closed: {:?}", code);
+
+                    self.reconnect(&gateway_url).await?;
                 }
-                future::Either::Right((Some(Err(err)), _)) => {
+                Either::Right((Some(Err(err)), _)) => {
                     log::error!("an error occured: {:?}", err);
 
                     self.reconnect(&gateway_url).await?;
                 }
-                future::Either::Right((None, _)) => panic!("socket closed"),
+                Either::Right((None, _)) => return Err(Error::GatewayClosed(None)),
             }
         }
         Ok(())
     }
 
     /// initialize the connection to the gateway
-    pub async fn init_connection(&mut self, gateway_url: &str) -> Result<(Hello, Ready), Error> {
+    async fn init_connection(&mut self, gateway_url: &str) -> Result<(Hello, Ready), Error> {
         self.socket.connect(gateway_url).await?;
 
-        let hello = match self.socket.next().await.unwrap().unwrap() {
+        let hello = match self.socket.next().await.expect("socket closed")? {
             GatewayEvent::Hello(h) => h,
             _ => unreachable!("hello should be first packet to recieve"),
         };
@@ -173,7 +245,7 @@ impl Connection {
 
         log::debug!("sent identify payload");
 
-        let ready = match self.socket.next().await.unwrap().unwrap() {
+        let ready = match self.socket.next().await.expect("socket closed").unwrap() {
             GatewayEvent::Dispatch(_, Event::Ready(ready)) => ready,
             GatewayEvent::InvalidSession(_reconnectable) => {
                 panic!("invalid session");
@@ -184,30 +256,13 @@ impl Connection {
         Ok((hello, ready))
     }
 
-    /// try reconnecting to the gatewy
-    pub async fn try_reconnect(&mut self, gateway_url: &str, max_retries: u16) -> Option<u64> {
-        let mut retries_left = max_retries;
-
-        while retries_left > 0 {
-            match self.reconnect(gateway_url).await {
-                Ok(heartbeat) => return Some(heartbeat),
-                Err(_) => {
-                    tokio::time::sleep(Duration::from_secs(1)).await;
-                    retries_left -= 1;
-                }
-            }
-        }
-
-        None
-    }
-
     /// reconnect to the gateway
-    pub async fn reconnect(&mut self, gateway_url: &str) -> Result<u64, Error> {
+    async fn reconnect(&mut self, gateway_url: &str) -> Result<u64, Error> {
         log::debug!("reconnecting");
         self.socket.reconnect(gateway_url).await?;
 
         log::debug!("sending hello");
-        let hello = match self.socket.next().await.unwrap().unwrap() {
+        let hello = match self.socket.next().await.expect("socket closed")? {
             GatewayEvent::Hello(h) => h,
             _ => unreachable!("hello should be first packet to recieve"),
         };
@@ -215,7 +270,11 @@ impl Connection {
         log::debug!("sending resume");
         let resume = command::Resume {
             token: self.token.clone(),
-            session_id: self.session_id.as_ref().unwrap().to_owned(),
+            session_id: self
+                .session_id
+                .as_ref()
+                .expect("resume only connections with session")
+                .to_owned(),
             seq: self.seq,
         };
         self.socket.send(GatewayCommand::Resume(resume)).await?;
@@ -228,9 +287,9 @@ impl Connection {
     }
 
     fn send_event(&self, event: Event) -> Result<(), Error> {
-        self.event_sender
+        self.tx
             .send(event)
-            .map_err(|_| Error::DiscordError(DiscordError::SendError))
+            .map_err(|s| Error::DiscordError(DiscordError::SendError))
     }
 
     async fn heartbeat(&mut self) {
@@ -243,42 +302,5 @@ impl Connection {
             .send(GatewayCommand::Heartbeat(self.seq))
             .await
             .unwrap();
-    }
-
-    pub fn uptime(&self) -> std::time::Duration {
-        self.running_since.map(|r| r.elapsed()).unwrap_or_default()
-    }
-}
-
-impl Future for Connection {
-    type Output = Result<(), Error>;
-
-    fn poll(
-        mut self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> Poll<Self::Output> {
-        let fut = self.run();
-        futures::pin_mut!(fut);
-        Poll::Ready(ready!(fut.poll(cx)))
-    }
-}
-
-pub struct Events {
-    rx: mpsc::UnboundedReceiver<Event>,
-}
-
-impl Events {
-    pub fn send_test(&mut self) {}
-}
-
-impl Stream for Events {
-    type Item = Event;
-
-    fn poll_next(
-        mut self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Option<Self::Item>> {
-        // self.rx.poll_next_unpin(cx)
-        self.rx.poll_recv(cx)
     }
 }

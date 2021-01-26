@@ -15,8 +15,7 @@ pub struct Embed {
     video: Option<EmbedVideo>,
     provider: Option<EmbedProvider>,
     author: Option<EmbedAuthor>,
-    #[serde(default)]
-    fields: Vec<EmbedFields>,
+    fields: Option<Vec<EmbedFields>>,
 }
 
 #[derive(Clone, Hash, Eq, PartialEq, Serialize, Deserialize, Debug)]

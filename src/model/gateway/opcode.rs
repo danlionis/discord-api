@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 /// Opcode values for Gateway Events
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 #[repr(u8)]
-pub enum Opcode {
+pub(crate) enum Opcode {
     Dispatch = 0,
     Heartbeat = 1,
     Identify = 2,

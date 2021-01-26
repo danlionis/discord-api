@@ -9,8 +9,7 @@ pub struct Emoji {
     /// emoji name
     pub name: Option<String>,
     /// roles this emoji is whitelisted to
-    #[serde(default)]
-    pub roles: Vec<RoleId>,
+    pub roles: Option<Vec<RoleId>>,
     /// user that created this emoji
     pub user: Option<User>,
     /// whether this emoji must be wrapped in colons

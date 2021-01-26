@@ -1,4 +1,6 @@
-use std::convert::From;
+//! Error types
+
+use std::{convert::From, error::Error as StdError, fmt::Display};
 use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode as WsCloseCode;
 
 #[derive(Debug)]
@@ -8,7 +10,7 @@ pub enum Error {
     ApiError(ApiError),
     ParseError(serde_json::Error),
     WebsocketError(tokio_tungstenite::tungstenite::Error),
-    GatewayClosed(CloseCode),
+    GatewayClosed(Option<CloseCode>),
     Custom(String),
 }
 
@@ -43,7 +45,7 @@ impl From<ApiError> for Error {
 
 impl From<CloseCode> for Error {
     fn from(code: CloseCode) -> Self {
-        Self::GatewayClosed(code)
+        Self::GatewayClosed(Some(code))
     }
 }
 

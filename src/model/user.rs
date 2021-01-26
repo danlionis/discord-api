@@ -43,6 +43,8 @@ pub struct User {
     #[serde(default)]
     pub premium_type: u8,
     /// the public [flags] on a user's account
+    ///
+    /// [flags]: https://discord.com/developers/docs/resources/user#user-object-user-flags
     #[serde(default)]
     pub public_flags: u64,
 }

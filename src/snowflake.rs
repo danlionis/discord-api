@@ -1,3 +1,7 @@
+//!
+//!
+//!
+
 use serde::{self, de::Visitor, Deserialize, Serialize};
 use std::convert::AsRef;
 use std::ops::Deref;
@@ -5,8 +9,8 @@ use std::str::FromStr;
 
 /// The `Snowflake` type is used for uniqely identifiable descriptors (IDs) across Discord
 ///
-/// A `Snowflake` is represented by a `u64` and will be serialized as such up to JavaScripts
-/// NUMBER.MAX_SAFE_INTEGER. Larger values will be serialized as a `String`
+/// A `Snowflake` is represented by a `u64` and will always be serialized as a String to prevent
+/// integer overflows on some languages
 ///
 /// [Reference]
 ///
@@ -25,10 +29,12 @@ impl Snowflake {
         (self.0 >> 22) + 1420070400000
     }
 
+    /// WorkerId this Snowflake was generated on
     pub fn internal_worker_id(&self) -> u64 {
         (self.0 & 0x3E0000) >> 17
     }
 
+    /// ProcessId this Snowflake was generated on
     pub fn internal_process_id(&self) -> u64 {
         (self.0 & 0x1F000) >> 12
     }
@@ -38,6 +44,7 @@ impl Snowflake {
         self.0 & 0xFFF
     }
 
+    /// Whether this Snowflake is a safe JavaScript integer
     pub fn is_safe(&self) -> bool {
         self.0 <= MAX_SAFE_INTEGER
     }
