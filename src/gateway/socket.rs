@@ -10,6 +10,7 @@ use tungstenite::{
     Message as WsMessage,
 };
 
+/// current gateway version
 const GATEWAY_VERSION: u16 = 8;
 
 /// `GatewaySocket` forwards GatewayEvents from and to the Gateway

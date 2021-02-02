@@ -27,9 +27,9 @@ pub struct Shard {
     state: Arc<RwLock<SharedConnState>>,
 }
 
-/// creates a new pair of `Shard` and a `ConnectionFut`
+/// creates a new pair of `Shard` and a `Connection`
 ///
-/// The `ConnectionFut` has to be spawned onto a runtime in order to connect to the gateway.
+/// The `Connection` has to be spawned onto a runtime in order to connect to the gateway.
 ///
 /// The `Shard` can be used to receive Events from and send Commands to the Gateway.
 pub fn new(token: &str) -> (Shard, Connection) {

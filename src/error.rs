@@ -1,6 +1,6 @@
 //! Error types
 
-use std::{convert::From, error::Error as StdError, fmt::Display};
+use std::convert::From;
 use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode as WsCloseCode;
 
 #[derive(Debug)]
@@ -51,6 +51,7 @@ impl From<CloseCode> for Error {
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 #[repr(u16)]
+#[allow(missing_docs)]
 pub enum CloseCode {
     UnknownError = 4000,
     UnknownOpcode = 4001,
@@ -97,6 +98,7 @@ impl From<WsCloseCode> for CloseCode {
 }
 
 #[derive(Debug)]
+#[allow(missing_docs)]
 pub enum ApiError {
     GeneralError = 0,
     UnknownAccount = 10001,

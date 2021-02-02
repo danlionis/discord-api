@@ -1,3 +1,5 @@
+//! [Reference](https://discord.com/developers/docs/resources/guild#guild-resource)
+
 mod guild;
 mod member;
 mod permission;

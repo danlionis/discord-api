@@ -2,6 +2,9 @@ use crate::model::id::RoleId;
 use crate::Snowflake;
 use serde::{Deserialize, Serialize};
 
+/// User Role
+///
+/// [Reference](https://discord.com/developers/docs/topics/permissions#role-object)
 #[derive(Clone, PartialEq, Eq, Hash, Debug, Deserialize, Serialize)]
 pub struct Role {
     /// role id

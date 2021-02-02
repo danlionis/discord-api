@@ -221,6 +221,7 @@ pub struct MessageSticker {
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug, DeserializeRepr, SerializeRepr)]
 #[repr(u8)]
+#[allow(missing_docs)]
 pub enum MessageStickerFormat {
     PNG = 1,
     APNG = 2,

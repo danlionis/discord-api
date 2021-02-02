@@ -1,7 +1,6 @@
 //! Wrapper utility module
 //!
 //! Wrapping a Type with a `ModelWrapper` allows it direct access to a `RestClient`
-//! ```
 
 use crate::rest::RestClient;
 use std::ops::{Deref, DerefMut};

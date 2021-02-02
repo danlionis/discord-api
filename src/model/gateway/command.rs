@@ -1,10 +1,18 @@
-use crate::model::gateway::intents::{self, Intents};
-use crate::model::gateway::Opcode;
-use crate::model::id::{ChannelId, GuildId, UserId};
-use crate::model::Activity;
-use serde::ser::SerializeStruct;
-use serde::Serialize;
+//! Gateway Commands
 
+use crate::model::{
+    gateway::{
+        intents::{self, Intents},
+        Opcode,
+    },
+    id::{ChannelId, GuildId, UserId},
+    Activity,
+};
+use serde::{ser::SerializeStruct, Serialize};
+
+/// Commands used to make requests to the gateway
+///
+/// [Reference](https://discord.com/developers/docs/topics/gateway#commands-and-events-gateway-commands)
 #[derive(Debug)]
 pub enum GatewayCommand {
     /// triggers the initial handshake with the gateway
@@ -26,6 +34,7 @@ pub enum GatewayCommand {
     UpdateStatus(UpdateStatus),
 }
 
+/// Triggers the initial handshake with the gateway
 #[derive(Debug, Serialize)]
 pub struct Identify {
     /// authentication token
@@ -36,7 +45,6 @@ pub struct Identify {
 
     // /// whether this connection supports compression of packets (TODO: implement compression)
     // compress: Option<bool>,
-    //
     /// value between 50 and 250, total number of members where the gateway will stop sending
     /// offline members in the guild member list
     pub large_threshold: Option<i32>,
@@ -70,16 +78,25 @@ impl Identify {
     }
 }
 
+/// [Reference](https://discord.com/developers/docs/topics/gateway#identify-identify-connection-properties)
 #[derive(Debug, Serialize)]
 pub struct ConnectionProperties {
+    /// your operating system
     #[serde(rename = "$os")]
     pub os: String,
+
+    /// your library name
     #[serde(rename = "$browser")]
     pub browser: String,
+
+    /// your library name
     #[serde(rename = "$device")]
     pub device: String,
 }
 
+/// Sent by the client to indicate a presence or status update
+///
+/// [Reference](https://discord.com/developers/docs/topics/gateway#update-status)
 #[derive(Debug, Serialize)]
 pub struct UpdateStatus {
     /// unix time (in milliseconds) of when the client went idle, or `None` if the client is not
@@ -97,13 +114,22 @@ pub struct UpdateStatus {
     pub afk: bool,
 }
 
+/// Used to replay missed events when a disconnected client resumes
+///
+/// [Reference](https://discord.com/developers/docs/topics/gateway#resume)
 #[derive(Debug, Serialize)]
 pub struct Resume {
+    /// session token
     pub token: String,
+    /// session id
     pub session_id: String,
+    /// last sequence number received
     pub seq: u64,
 }
 
+/// Used to request all members for a guild or a list of guilds.
+///
+/// [Reference](https://discord.com/developers/docs/topics/gateway#request-guild-members)
 #[derive(Debug, Serialize)]
 pub struct RequestGuildMembers {
     /// id of the guild to get members for
@@ -126,18 +152,17 @@ pub struct RequestGuildMembers {
     pub nonce: Option<String>,
 }
 
+/// Sent when a client wants to join, move, or disconnect from a voice channel
 #[derive(Debug, Serialize)]
 pub struct UpdateVoiceState {
+    /// id of the guild
     pub guild_id: GuildId,
+    /// id of the voice channel the client wants to join (`None` if disconnecting)
     pub channel_id: Option<ChannelId>,
+    /// is the client muted
     pub self_mute: bool,
+    /// is the client deafend
     pub self_deaf: bool,
-}
-
-impl GatewayCommand {
-    pub(crate) fn opcode(&self) -> Opcode {
-        Opcode::from(self)
-    }
 }
 
 impl Serialize for GatewayCommand {
@@ -146,7 +171,7 @@ impl Serialize for GatewayCommand {
         S: serde::Serializer,
     {
         let mut state = serializer.serialize_struct("GatewayCommand", 2)?;
-        state.serialize_field("op", &self.opcode())?;
+        state.serialize_field("op", &Opcode::from(self))?;
 
         match self {
             GatewayCommand::Identify(identify) => state.serialize_field("d", identify),

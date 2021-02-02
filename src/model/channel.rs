@@ -8,7 +8,7 @@ use std::{convert::TryFrom, ops::Deref};
 
 /// Represents the most general channel type within Discord
 ///
-/// https://discord.com/developers/docs/resources/channel#channel-object
+/// [Reference](https://discord.com/developers/docs/resources/channel#channel-object)
 #[derive(Clone, PartialEq, Eq, Hash, Debug, Deserialize, Serialize)]
 pub struct Channel {
     /// the id of this channel
@@ -81,6 +81,7 @@ pub struct InvalidChannelType;
 
 #[derive(Debug, Eq, PartialEq, Clone, Copy, Hash)]
 #[repr(u8)]
+#[allow(missing_docs)]
 pub enum ChannelType {
     GuildText = 0,
     DM = 1,

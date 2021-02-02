@@ -29,6 +29,7 @@ pub struct Activity {
 
 #[derive(Debug, SerializeRepr, DeserializeRepr, Hash, Eq, PartialEq, Clone)]
 #[repr(u8)]
+#[allow(missing_docs)]
 pub enum ActivityType {
     Game = 0,
     Streaming = 1,

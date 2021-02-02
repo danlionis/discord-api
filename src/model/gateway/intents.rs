@@ -1,3 +1,5 @@
+//! [Reference](https://discord.com/developers/docs/topics/gateway#gateway-intents)
+
 /// Intent Bits
 pub type Intents = u32;
 

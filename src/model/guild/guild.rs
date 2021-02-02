@@ -5,6 +5,9 @@ use crate::Snowflake;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+/// Guild Object
+///
+/// [Reference](https://discord.com/developers/docs/resources/guild#guild-object)
 #[derive(Clone, PartialEq, Eq, Debug, Deserialize, Serialize)]
 pub struct Guild {
     /// guild id
@@ -73,7 +76,8 @@ pub struct Guild {
     pub channels: Vec<Channel>,
     /// presences of the members in the guild, will only include non-offline members if the size is greater than `large_threshold`
     #[serde(default)]
-    pub presences: Vec<Presence>,
+    pub presences: Option<Vec<Presence>>,
+    /// maximum number of presences in the guild
     pub max_presences: Option<i32>,
     /// the maximum number of members for the guild
     pub max_members: i32,
@@ -99,11 +103,16 @@ pub struct Guild {
     pub approximate_presence_count: Option<i32>,
 }
 
+/// Partial Guild Object. Represents an offline Guild, or a guild whose information has not been
+/// provided through `GuildCreate` events
+///
+/// [Reference](https://discord.com/developers/docs/resources/guild#unavailable-guild-object)
 #[derive(Clone, PartialEq, Eq, Debug, Deserialize, Serialize)]
 pub struct UnavailableGuild {
     id: GuildId,
     unavailable: bool,
 }
 
+/// [Reference](https://discord.com/developers/docs/resources/guild#guild-object-guild-features)
 #[derive(Clone, PartialEq, Eq, Hash, Debug, Deserialize, Serialize)]
-pub struct GuildFeature(String);
+pub struct GuildFeature(pub String);

@@ -1,3 +1,5 @@
+//! Events sent by the Gateway
+
 use crate::model::{gateway::Opcode, UnavailableGuild};
 use crate::model::{
     Channel, Guild, GuildMember, Message, MessageDelete, MessageUpdate, Presence, User, VoiceState,
@@ -12,18 +14,18 @@ use crate::model::gateway::dispatch::*;
 /// Event received from the Gateway
 #[derive(Debug, PartialEq)]
 pub enum GatewayEvent {
+    /// A Dispatch Event
     Dispatch(u64, Event),
+    /// Heartbeat Request
     Heartbeat(u64),
+    /// Heartbeat Ack
     HeartbeatAck,
+    /// Initial Packet
     Hello(Hello),
+    /// Invalid Session Packet
     InvalidSession(bool),
+    /// Reconnect Request
     Reconnect,
-}
-
-impl GatewayEvent {
-    pub(crate) fn opcode(&self) -> Opcode {
-        Opcode::from(self)
-    }
 }
 
 /// A `GatewayEventSeed` is a Deserializer that contains information
@@ -244,6 +246,7 @@ impl<'de> Visitor<'de> for GatewayEventVisitor<'_> {
 
 /// A Gateway Dispatch Event
 #[derive(PartialEq, Clone, Debug, Serialize, Deserialize)]
+#[allow(missing_docs)]
 pub enum Event {
     Resume,
     MessageCreate(Box<Message>),
@@ -284,6 +287,7 @@ pub enum Event {
 }
 
 impl Event {
+    /// Type of the Event
     pub fn kind(&self) -> &str {
         match self {
             Event::Resume => "RESUME",
@@ -422,8 +426,10 @@ impl<'de> DeserializeSeed<'de> for DispatchEventSeed<'_> {
     }
 }
 
+/// Event that defines the Heartbeat Interval
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone, Hash)]
 pub struct Hello {
+    /// heartbeat interval
     pub heartbeat_interval: u64,
 }
 
