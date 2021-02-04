@@ -284,6 +284,7 @@ pub enum Event {
     InviteCreate(InviteCreate),
     InviteDelete(InviteDelete),
     WebhooksUpdate(WebhooksUpdate),
+    UnknownEvent(String),
 }
 
 impl Event {
@@ -326,6 +327,7 @@ impl Event {
             Event::InviteCreate(_) => "INVITE_CREATE",
             Event::InviteDelete(_) => "INVITE_DELETE",
             Event::WebhooksUpdate(_) => "WEBHOOKS_UPDATE",
+            Event::UnknownEvent(_) => "UNKNOWN",
         }
     }
 }
@@ -419,7 +421,11 @@ impl<'de> DeserializeSeed<'de> for DispatchEventSeed<'_> {
             }
             "VOICE_STATE_UPDATE" => Event::VoiceStateUpdate(VoiceState::deserialize(deserializer)?),
             "WEBHOOKS_UPDATE" => Event::WebhooksUpdate(WebhooksUpdate::deserialize(deserializer)?),
-            _ => panic!("unknown event type"),
+            s => {
+                log::error!("unknown event type: {}", s);
+                IgnoredAny::deserialize(deserializer)?;
+                Event::UnknownEvent(s.to_owned())
+            }
         };
 
         Ok(res)
