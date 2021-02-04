@@ -17,10 +17,10 @@
 #[cfg(feature = "cache")]
 pub mod cache;
 
+pub mod api;
 pub mod error;
 pub mod gateway;
 pub mod model;
-pub mod rest;
 pub mod util;
 
 mod snowflake;

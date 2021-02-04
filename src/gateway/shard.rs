@@ -1,11 +1,11 @@
 use super::socket::GatewaySocket;
 use crate::{
+    api::Api,
     error::{DiscordError, Error},
     model::gateway::{
         command::{self, GatewayCommand},
         Event, GatewayEvent, Hello, Ready,
     },
-    rest::RestClient,
 };
 use futures::{future::poll_fn, future::Either, prelude::*};
 use std::{
@@ -22,7 +22,7 @@ use tokio::{sync::mpsc, time::Interval};
 #[derive(Debug)]
 pub struct Shard {
     token: String,
-    rest_client: RestClient,
+    api: Api,
     rx: mpsc::UnboundedReceiver<Event>,
     state: Arc<RwLock<SharedConnState>>,
 }
@@ -33,25 +33,25 @@ pub struct Shard {
 ///
 /// The `Shard` can be used to receive Events from and send Commands to the Gateway.
 pub fn new(token: &str) -> (Shard, Connection) {
-    with_rest_client(token, RestClient::new(token))
+    with_rest_client(token, Api::new(token))
 }
 
-/// same as `gateway::new` but does not create a new RestClient
-pub fn with_rest_client(token: &str, rest_client: RestClient) -> (Shard, Connection) {
+/// same as `gateway::new` but does not create a new ApiClient
+pub fn with_rest_client(token: &str, api: Api) -> (Shard, Connection) {
     let (e_tx, e_rx) = mpsc::unbounded_channel();
 
     let state = Arc::new(RwLock::new(SharedConnState { ping: None }));
 
     let shard = Shard {
         token: token.to_owned(),
-        rest_client: rest_client.clone(),
+        api: api.clone(),
         rx: e_rx,
         state: Arc::clone(&state),
     };
 
     let conn = ConnectionImpl {
         token: token.to_owned(),
-        rest_client: rest_client.clone(),
+        api: api.clone(),
         seq: 0,
         session_id: None,
         tx: e_tx,
@@ -129,7 +129,7 @@ struct SharedConnState {
 #[derive(Debug)]
 struct ConnectionImpl {
     token: String,
-    rest_client: RestClient,
+    api: Api,
     seq: u64,
     session_id: Option<String>,
     tx: mpsc::UnboundedSender<Event>,
@@ -143,7 +143,7 @@ impl ConnectionImpl {
     /// Start the connection and start recieving events
     async fn start(mut self) -> Result<(), Error> {
         let mut gateway_url = self
-            .rest_client
+            .api
             .get_gateway()
             .await
             .expect("could not get gateway url");

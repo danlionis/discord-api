@@ -2,22 +2,22 @@
 //!
 //! Wrapping a Type with a `ModelWrapper` allows it direct access to a `RestClient`
 
-use crate::rest::RestClient;
+use crate::api::Api;
 use std::ops::{Deref, DerefMut};
 
 /// Utility to wrap a Model with access to a [`RestClient`]
 ///
 /// by itself this type does not have any methods associated with it
 #[derive(Debug)]
-pub struct RestWrapper<T> {
+pub struct ApiWrapper<T> {
     inner: T,
-    rest_client: RestClient,
+    api: Api,
 }
 
-impl<T> RestWrapper<T> {
-    /// Wrap a given T with a RestClient
-    pub fn new(inner: T, rest_client: RestClient) -> Self {
-        RestWrapper { inner, rest_client }
+impl<T> ApiWrapper<T> {
+    /// Wrap a given T with a ApiClient
+    pub fn new(inner: T, api: Api) -> Self {
+        ApiWrapper { inner, api }
     }
 
     /// Extracts the inner value
@@ -26,19 +26,19 @@ impl<T> RestWrapper<T> {
     }
 
     /// Get a reference to the inner RestClient
-    pub fn rest_client(&self) -> &RestClient {
-        &self.rest_client
+    pub fn api(&self) -> &Api {
+        &self.api
     }
 }
 
-impl<T> Deref for RestWrapper<T> {
+impl<T> Deref for ApiWrapper<T> {
     type Target = T;
     fn deref(&self) -> &Self::Target {
         &self.inner
     }
 }
 
-impl<T> DerefMut for RestWrapper<T> {
+impl<T> DerefMut for ApiWrapper<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.inner
     }

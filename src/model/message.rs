@@ -10,7 +10,7 @@ use crate::{
             WebhookId,
         },
     },
-    util::RestWrapper,
+    util::ApiWrapper,
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -228,19 +228,17 @@ pub enum MessageStickerFormat {
     LOTTIE = 3,
 }
 
-impl RestWrapper<Message> {
+impl ApiWrapper<Message> {
     /// Send a message in the same text channel as the original message
     pub async fn reply(&self, content: impl AsRef<str>) -> Result<Message, Error> {
         let reference = self.reference();
-        self.rest_client()
+        self.api()
             .create_message(self.channel_id, content.as_ref(), Some(reference))
             .await
     }
 
     /// Delete this message
     pub async fn delete(&self) -> Result<(), Error> {
-        self.rest_client()
-            .delete_message(self.channel_id, self.id)
-            .await
+        self.api().delete_message(self.channel_id, self.id).await
     }
 }

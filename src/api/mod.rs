@@ -8,41 +8,41 @@ use crate::{
         id::{ChannelId, MessageId, UserId},
         Channel, Message, MessageReference,
     },
-    util::RestWrapper,
+    util::ApiWrapper,
 };
 use hyper;
 use std::sync::Arc;
 
 /// Discord Rest API Client
-pub struct RestClient {
+pub struct Api {
     inner: Arc<Inner>,
 }
 
-impl Clone for RestClient {
+impl Clone for Api {
     fn clone(&self) -> Self {
-        RestClient {
+        Api {
             inner: Arc::clone(&self.inner),
         }
     }
 }
 
-impl std::fmt::Debug for RestClient {
+impl std::fmt::Debug for Api {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("RestClient").finish()
     }
 }
 
-impl RestClient {
-    /// Create a new RestClient
+impl Api {
+    /// Create a new ApiClient
     pub fn new(token: &str) -> Self {
-        RestClient {
+        Api {
             inner: Arc::new(Inner::new(token)),
         }
     }
 
-    /// Wrap a value with this RestClient
-    pub fn wrap<T>(&self, inner: T) -> RestWrapper<T> {
-        RestWrapper::new(inner, self.clone())
+    /// Wrap a value with this ApiClient
+    pub fn wrap<T>(&self, inner: T) -> ApiWrapper<T> {
+        ApiWrapper::new(inner, self.clone())
     }
 
     // pub async fn get_guilds(&self) {
