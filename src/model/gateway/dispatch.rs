@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 /// Initial state information
 ///
 /// [Reference](https://discord.com/developers/docs/topics/gateway#ready)
-#[derive(Debug, Deserialize, Clone, PartialEq, Serialize)]
+#[derive(Debug, Deserialize, Clone, PartialEq, Eq, Serialize)]
 pub struct Ready {
     /// gateway version
     #[serde(rename = "v")]

@@ -245,7 +245,7 @@ impl<'de> Visitor<'de> for GatewayEventVisitor<'_> {
 }
 
 /// A Gateway Dispatch Event
-#[derive(PartialEq, Clone, Debug, Serialize, Deserialize)]
+#[derive(PartialEq, Eq, Clone, Debug, Serialize, Deserialize)]
 #[allow(missing_docs)]
 pub enum Event {
     Resume,
