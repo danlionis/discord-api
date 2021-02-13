@@ -51,7 +51,7 @@ impl GatewaySocket {
                 code: WsCloseCode::Normal,
                 reason: "".into(),
             };
-            close_stream(s, Some(close_frame)).await?;
+            close_stream(s, Some(close_frame)).await;
         }
         log::debug!("websocket connection closed");
         Ok(())
@@ -60,7 +60,7 @@ impl GatewaySocket {
     /// close the current connection if it exisits and reconnect keeping sessions active
     pub async fn reconnect(&mut self, gateway_url: &str) -> Result<(), WsError> {
         if let Some(s) = self.inner.take() {
-            close_stream(s, None).await?;
+            close_stream(s, None).await;
         }
         self.connect(gateway_url).await
     }
@@ -152,11 +152,8 @@ impl Sink<GatewayCommand> for GatewaySocket {
 async fn close_stream<'a>(
     mut s: WebSocketStream<AutoStream<TcpStream>>,
     close_frame: Option<CloseFrame<'a>>,
-) -> Result<(), WsError> {
-    match s.close(close_frame).await {
-        Ok(_) | Err(WsError::AlreadyClosed) => {}
-        Err(err) => return Err(err),
+) {
+    if let Err(e) = s.close(close_frame).await {
+        log::warn!("error closing the connection: {}", e);
     }
-
-    Ok(())
 }
