@@ -7,24 +7,34 @@ pub type Timestamp = u64;
 
 #[derive(Debug, Serialize, Deserialize, Hash, Eq, PartialEq, Clone)]
 pub struct Activity {
-    name: String,
+    /// the activity's name
+    pub name: String,
+    /// activity type
     #[serde(rename = "type")]
-    kind: ActivityType,
-    url: Option<String>,
+    pub kind: ActivityType,
+    /// stream url, is validated when type is 'Streaming'
+    pub url: Option<String>,
     /// unix timestamp of when the activity was added to the user's session
-    created_at: Timestamp,
-    timestamps: Option<Timestamps>,
-    application_id: Option<ApplicationId>,
-    details: Option<String>,
-    state: Option<String>,
-    emoji: Option<Emoji>,
+    pub created_at: Timestamp,
+    /// unix timestamps for start and/or end of the game
+    pub timestamps: Option<Timestamps>,
+    /// application id for the game
+    pub application_id: Option<ApplicationId>,
+    /// what the player is currently doing
+    pub details: Option<String>,
+    /// the user's current party status
+    pub state: Option<String>,
+    /// the emoji used for a custom status
+    pub emoji: Option<Emoji>,
     // party: Option<Party>
     // assets: Option<Assets>,
     // secrets: Option<Secrets>,
+    /// whether or not the activity is an instanced game session
     #[serde(default)]
-    instance: bool,
+    pub instance: bool,
+    /// activity flags, describes what the payload includes
     #[serde(default)]
-    flags: u8,
+    pub flags: u8,
 }
 
 #[derive(Debug, SerializeRepr, DeserializeRepr, Hash, Eq, PartialEq, Clone)]
@@ -38,8 +48,11 @@ pub enum ActivityType {
     Competing = 5,
 }
 
+/// start and ending times for an activity
 #[derive(Debug, Serialize, Deserialize, Hash, Eq, PartialEq, Clone)]
 pub struct Timestamps {
-    start: Option<Timestamp>,
-    end: Option<Timestamp>,
+    /// unix time in milliseconds of when the activity started
+    pub start: Option<Timestamp>,
+    /// unix time in milliseconds of when the activity ends
+    pub end: Option<Timestamp>,
 }
