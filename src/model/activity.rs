@@ -34,7 +34,7 @@ pub struct Activity {
     pub instance: bool,
     /// activity flags, describes what the payload includes
     #[serde(default)]
-    pub flags: u8,
+    pub flags: u32,
 }
 
 #[derive(Debug, SerializeRepr, DeserializeRepr, Hash, Eq, PartialEq, Clone)]
