@@ -1,4 +1,6 @@
 //! RestClient connections to the Discord API
+// TODO: remove hyper, only create the requests
+// let the appliction handle sending
 
 mod ratelimit;
 mod routes;

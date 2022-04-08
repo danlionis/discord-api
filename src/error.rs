@@ -1,29 +1,27 @@
 //! Error types
 
 use std::convert::From;
-use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode as WsCloseCode;
 
+// Discord Error Types
 #[derive(Debug)]
 pub enum Error {
-    DiscordError(DiscordError),
+    // DiscordError(DiscordError),
+    /// Rest Error
     RequestError(hyper::Error),
+    /// Api Error
     ApiError(ApiError),
+    /// Serde parse error
     ParseError(serde_json::Error),
-    WebsocketError(tokio_tungstenite::tungstenite::Error),
+    /// Gateway Error
     GatewayClosed(Option<CloseCode>),
+    /// Custom Error
     Custom(String),
 }
 
-#[derive(Debug)]
-pub enum DiscordError {
-    SendError,
-}
-
-impl From<tokio_tungstenite::tungstenite::Error> for Error {
-    fn from(err: tokio_tungstenite::tungstenite::Error) -> Self {
-        Self::WebsocketError(err)
-    }
-}
+// #[derive(Debug)]
+// pub enum DiscordError {
+//     SendError,
+// }
 
 impl From<serde_json::Error> for Error {
     fn from(err: serde_json::Error) -> Self {
@@ -87,13 +85,6 @@ impl From<u16> for CloseCode {
             4014 => CloseCode::DisallowedIntents,
             _ => CloseCode::UnknownError,
         }
-    }
-}
-
-impl From<WsCloseCode> for CloseCode {
-    fn from(v: WsCloseCode) -> Self {
-        let v: u16 = v.into();
-        CloseCode::from(v)
     }
 }
 

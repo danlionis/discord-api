@@ -1,4 +1,4 @@
-//! Low Level Discord Library
+//! Low level Discord protocol library
 
 // extern crate chrono;
 // extern crate hyper;
@@ -16,10 +16,9 @@
 
 // #[cfg(feature = "cache")]
 pub mod cache;
-// pub mod proto;
+pub mod proto;
 
 pub mod error;
-pub mod gateway;
 pub mod model;
 pub mod rest;
 pub mod util;
