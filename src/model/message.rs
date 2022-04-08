@@ -10,7 +10,7 @@ use crate::{
             WebhookId,
         },
     },
-    util::ApiWrapper,
+    util::RestWrapper,
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -228,7 +228,7 @@ pub enum MessageStickerFormat {
     LOTTIE = 3,
 }
 
-impl ApiWrapper<Message> {
+impl RestWrapper<Message> {
     /// Send a message in the same text channel as the original message
     pub async fn reply(&self, content: impl AsRef<str>) -> Result<Message, Error> {
         let reference = self.reference();

@@ -50,6 +50,9 @@ pub struct User {
 }
 
 impl User {
+    /// Combination of username and discriminator
+    ///
+    /// e.g. username#1234
     pub fn tag(&self) -> String {
         return format!("{}#{}", self.username, self.discriminator);
     }

@@ -1,17 +1,17 @@
 use super::socket::GatewaySocket;
 use crate::{
-    api::Api,
     error::{DiscordError, Error},
     model::gateway::{
         command::{self, GatewayCommand},
         Event, GatewayEvent, Hello, Ready,
     },
+    rest::Rest,
 };
 use futures::{future::poll_fn, future::Either, prelude::*};
 use std::{
     future::Future,
     pin::Pin,
-    sync::{Arc, RwLock},
+    // sync::{Arc, RwLock},
     task::{Context, Poll},
     time::{self, Instant},
 };
@@ -22,9 +22,9 @@ use tokio::{sync::mpsc, time::Interval};
 #[derive(Debug)]
 pub struct Shard {
     token: String,
-    api: Api,
+    rest: Rest,
     rx: mpsc::UnboundedReceiver<Event>,
-    state: Arc<RwLock<SharedConnState>>,
+    // state: Arc<RwLock<SharedConnState>>,
 }
 
 /// creates a new pair of `Shard` and a `Connection`
@@ -33,20 +33,20 @@ pub struct Shard {
 ///
 /// The `Shard` can be used to receive Events from and send Commands to the Gateway.
 pub fn new(token: &str) -> (Shard, Connection) {
-    with_rest_client(token, Api::new(token))
+    with_rest_client(token, Rest::new(token))
 }
 
 /// same as `gateway::new` but does not create a new ApiClient
-pub fn with_rest_client(token: &str, api: Api) -> (Shard, Connection) {
+pub fn with_rest_client(token: &str, api: Rest) -> (Shard, Connection) {
     let (e_tx, e_rx) = mpsc::unbounded_channel();
 
-    let state = Arc::new(RwLock::new(SharedConnState { ping: None }));
+    // let state = Arc::new(RwLock::new(SharedConnState { ping: None }));
 
     let shard = Shard {
         token: token.to_owned(),
-        api: api.clone(),
+        rest: api.clone(),
         rx: e_rx,
-        state: Arc::clone(&state),
+        // state: Arc::clone(&state),
     };
 
     let conn = ConnectionImpl {
@@ -58,17 +58,17 @@ pub fn with_rest_client(token: &str, api: Api) -> (Shard, Connection) {
         socket: GatewaySocket::new(),
         heartbeat_interval: None,
         hearbeat_ackd: true,
-        state,
+        // state,
     };
 
     (shard, Connection::new(conn))
 }
 
 impl Shard {
-    /// Ping to the gateway. `None` if not connected
-    pub fn ping(&self) -> Option<u128> {
-        self.state.read().unwrap().ping
-    }
+    // /// Ping to the gateway. `None` if not connected
+    // pub fn ping(&self) -> Option<u128> {
+    //     self.state.read().unwrap().ping
+    // }
 
     /// Receive an Event
     ///
@@ -129,14 +129,14 @@ struct SharedConnState {
 #[derive(Debug)]
 struct ConnectionImpl {
     token: String,
-    api: Api,
+    api: Rest,
     seq: u64,
     session_id: Option<String>,
     tx: mpsc::UnboundedSender<Event>,
     socket: GatewaySocket,
     heartbeat_interval: Option<Interval>,
     hearbeat_ackd: bool,
-    state: Arc<RwLock<SharedConnState>>,
+    // state: Arc<RwLock<SharedConnState>>,
 }
 
 impl ConnectionImpl {
@@ -175,36 +175,46 @@ impl ConnectionImpl {
                     last_heartbeat = Some(Instant::now());
                     self.heartbeat().await;
                 }
-                Either::Right((Some(Ok(event)), _)) => match event {
-                    GatewayEvent::Dispatch(seq, e) => {
-                        log::debug!("dispatch event= {}", e.kind());
-                        self.seq = seq;
-                        self.send_event(e)?;
-                    }
-                    GatewayEvent::Heartbeat(_) => {
-                        log::debug!("heartbeat requested");
-                        self.heartbeat().await;
-                    }
-                    GatewayEvent::Reconnect => {
-                        log::warn!("reconnect requested");
-                        self.reconnect(&gateway_url).await?;
-                    }
-                    GatewayEvent::InvalidSession(reconnectable) => {
-                        log::warn!("invalid session; reconnectable: {}", reconnectable);
-                        if reconnectable {
-                            self.reconnect(&gateway_url).await?;
-                        } else {
-                            break;
+                Either::Right((Some(Ok(event)), _)) => {
+                    // send each event in its raw json form
+                    self.send_event(Event::Raw(event.1))?;
+
+                    match event.0 {
+                        GatewayEvent::Dispatch(seq, e) => {
+                            log::debug!("dispatch event= {}", e.kind());
+                            self.seq = seq;
+                            self.send_event(e)?;
                         }
-                    }
-                    GatewayEvent::Hello(_hello) => {}
-                    GatewayEvent::HeartbeatAck => {
-                        self.hearbeat_ackd = true;
-                        self.state.write().unwrap().ping =
-                            Some(last_heartbeat.unwrap().elapsed().as_millis());
-                        log::trace!("heartbeat ack");
-                    }
-                },
+                        GatewayEvent::Heartbeat(_) => {
+                            log::debug!("heartbeat requested");
+                            self.heartbeat().await;
+                        }
+                        GatewayEvent::Reconnect => {
+                            log::warn!("reconnect requested");
+                            self.reconnect(&gateway_url).await?;
+                        }
+                        GatewayEvent::InvalidSession(reconnectable) => {
+                            log::warn!("invalid session; reconnectable: {}", reconnectable);
+                            if reconnectable {
+                                self.reconnect(&gateway_url).await?;
+                            } else {
+                                break;
+                            }
+                        }
+                        GatewayEvent::Hello(_hello) => {}
+                        GatewayEvent::HeartbeatAck => {
+                            self.hearbeat_ackd = true;
+                            // self.state.write().unwrap().ping =
+                            //     Some(last_heartbeat.unwrap().elapsed().as_millis());
+
+                            self.send_event(Event::Ping(
+                                last_heartbeat.unwrap().elapsed().as_millis(),
+                            ))?;
+
+                            log::trace!("heartbeat ack");
+                        }
+                    };
+                }
                 Either::Right((Some(Err(Error::GatewayClosed(code))), _)) => {
                     log::warn!("connection closed: {:?}", code);
 
@@ -225,7 +235,7 @@ impl ConnectionImpl {
     async fn init_connection(&mut self, gateway_url: &str) -> Result<(Hello, Ready), Error> {
         self.socket.connect(gateway_url).await?;
 
-        let hello = match self.socket.next().await.expect("socket closed")? {
+        let hello = match self.socket.next().await.expect("socket closed")?.0 {
             GatewayEvent::Hello(h) => h,
             _ => unreachable!("hello should be first packet to recieve"),
         };
@@ -245,7 +255,7 @@ impl ConnectionImpl {
 
         log::debug!("sent identify payload");
 
-        let ready = match self.socket.next().await.expect("socket closed").unwrap() {
+        let ready = match self.socket.next().await.expect("socket closed").unwrap().0 {
             GatewayEvent::Dispatch(_, Event::Ready(ready)) => ready,
             GatewayEvent::InvalidSession(_reconnectable) => {
                 panic!("invalid session");
@@ -262,7 +272,7 @@ impl ConnectionImpl {
         self.socket.reconnect(gateway_url).await?;
 
         log::debug!("sending hello");
-        let hello = match self.socket.next().await.expect("socket closed")? {
+        let hello = match self.socket.next().await.expect("socket closed")?.0 {
             GatewayEvent::Hello(h) => h,
             _ => unreachable!("hello should be first packet to recieve"),
         };

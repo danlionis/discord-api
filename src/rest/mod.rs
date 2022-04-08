@@ -1,5 +1,6 @@
 //! RestClient connections to the Discord API
 
+mod ratelimit;
 mod routes;
 
 use crate::{
@@ -8,41 +9,40 @@ use crate::{
         id::{ChannelId, MessageId, UserId},
         Channel, Message, MessageReference,
     },
-    util::ApiWrapper,
+    util::RestWrapper,
 };
-use hyper;
 use std::sync::Arc;
 
 /// Discord Rest API Client
-pub struct Api {
+pub struct Rest {
     inner: Arc<Inner>,
 }
 
-impl Clone for Api {
+impl Clone for Rest {
     fn clone(&self) -> Self {
-        Api {
+        Rest {
             inner: Arc::clone(&self.inner),
         }
     }
 }
 
-impl std::fmt::Debug for Api {
+impl std::fmt::Debug for Rest {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("RestClient").finish()
     }
 }
 
-impl Api {
+impl Rest {
     /// Create a new ApiClient
     pub fn new(token: &str) -> Self {
-        Api {
+        Rest {
             inner: Arc::new(Inner::new(token)),
         }
     }
 
     /// Wrap a value with this ApiClient
-    pub fn wrap<T>(&self, inner: T) -> ApiWrapper<T> {
-        ApiWrapper::new(inner, self.clone())
+    pub fn wrap<T>(&self, inner: T) -> RestWrapper<T> {
+        RestWrapper::new(inner, self.clone())
     }
 
     // pub async fn get_guilds(&self) {
@@ -195,6 +195,7 @@ impl Inner {
             .unwrap();
 
         let res = self.client.request(req).await?;
+        dbg!(&res);
 
         Ok(res)
     }

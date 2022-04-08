@@ -127,6 +127,16 @@ pub struct Resume {
     pub seq: u64,
 }
 
+impl Resume {
+    pub fn new(token: String, session_id: String, seq: u64) -> Self {
+        Resume {
+            token,
+            session_id,
+            seq,
+        }
+    }
+}
+
 /// Used to request all members for a guild or a list of guilds.
 ///
 /// [Reference](https://discord.com/developers/docs/topics/gateway#request-guild-members)

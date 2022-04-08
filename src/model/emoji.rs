@@ -2,6 +2,7 @@ use crate::model::id::{EmojiId, RoleId};
 use crate::model::User;
 use serde::{Deserialize, Serialize};
 
+/// Emoji data
 #[derive(Clone, PartialEq, Eq, Hash, Debug, Deserialize, Serialize)]
 pub struct Emoji {
     /// emoji id

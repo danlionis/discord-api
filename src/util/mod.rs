@@ -3,4 +3,4 @@
 mod resource;
 mod wrapper;
 
-pub use wrapper::ApiWrapper;
+pub use wrapper::RestWrapper;

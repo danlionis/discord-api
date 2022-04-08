@@ -66,8 +66,10 @@ impl GatewaySocket {
     }
 }
 
+type RawEvent = String;
+
 impl Stream for GatewaySocket {
-    type Item = Result<GatewayEvent, Error>;
+    type Item = Result<(GatewayEvent, RawEvent), Error>;
 
     fn poll_next(
         mut self: std::pin::Pin<&mut Self>,
@@ -88,7 +90,7 @@ impl Stream for GatewaySocket {
                         .expect(&format!("could not deserialize: {}", msg))
                 };
 
-                Poll::Ready(Some(Ok(event)))
+                Poll::Ready(Some(Ok((event, msg))))
             }
             Poll::Ready(Some(Ok(WsMessage::Close(frame)))) => {
                 let code = frame
@@ -104,6 +106,42 @@ impl Stream for GatewaySocket {
             Poll::Ready(None) => Poll::Ready(None),
             Poll::Pending => Poll::Pending,
         }
+    }
+}
+
+impl Sink<String> for GatewaySocket {
+    type Error = WsError;
+
+    fn poll_ready(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> Poll<Result<(), Self::Error>> {
+        let stream = self.inner.as_mut().expect("socket not connected");
+        stream.poll_ready_unpin(cx)
+    }
+
+    fn start_send(mut self: std::pin::Pin<&mut Self>, item: String) -> Result<(), Self::Error> {
+        let stream = self.inner.as_mut().expect("socket not connected");
+
+        stream.start_send_unpin(WsMessage::Text(item))
+    }
+
+    fn poll_flush(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> Poll<Result<(), Self::Error>> {
+        let stream = self.inner.as_mut().expect("socket not connected");
+
+        stream.poll_flush_unpin(cx)
+    }
+
+    fn poll_close(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> Poll<Result<(), Self::Error>> {
+        let stream = self.inner.as_mut().expect("socket not connected");
+
+        stream.poll_close_unpin(cx)
     }
 }
 

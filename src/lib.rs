@@ -14,13 +14,14 @@
     broken_intra_doc_links
 )]
 
-#[cfg(feature = "cache")]
+// #[cfg(feature = "cache")]
 pub mod cache;
+// pub mod proto;
 
-pub mod api;
 pub mod error;
 pub mod gateway;
 pub mod model;
+pub mod rest;
 pub mod util;
 
 mod snowflake;

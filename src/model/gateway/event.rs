@@ -14,7 +14,7 @@ use crate::model::gateway::dispatch::*;
 /// Event received from the Gateway
 #[derive(Debug, PartialEq)]
 pub enum GatewayEvent {
-    /// A Dispatch Event
+    /// A Dispatch Event with Raw String
     Dispatch(u64, Event),
     /// Heartbeat Request
     Heartbeat(u64),
@@ -26,6 +26,28 @@ pub enum GatewayEvent {
     InvalidSession(bool),
     /// Reconnect Request
     Reconnect,
+}
+
+impl GatewayEvent {
+    pub fn kind(&self) -> &str {
+        match self {
+            GatewayEvent::Dispatch(_, _) => "DISPATCH",
+            GatewayEvent::Heartbeat(_) => "HEARTBEAT",
+            GatewayEvent::HeartbeatAck => "HEARTBEAT_ACK",
+            GatewayEvent::Hello(_) => "HELLO",
+            GatewayEvent::InvalidSession(_) => "INVALID_SESSION",
+            GatewayEvent::Reconnect => "RECONNECT",
+        }
+    }
+}
+
+impl GatewayEvent {
+    /// Deserialize a GatewayEvent from a json string received from the gateway
+    pub fn from_json_str(json_str: &str) -> Result<GatewayEvent, serde_json::Error> {
+        let seed = GatewayEventSeed::from_json_str(&json_str);
+        let mut deserializer = serde_json::Deserializer::from_str(&json_str);
+        seed.deserialize(&mut deserializer)
+    }
 }
 
 /// A `GatewayEventSeed` is a Deserializer that contains information
@@ -246,6 +268,7 @@ impl<'de> Visitor<'de> for GatewayEventVisitor<'_> {
 
 /// A Gateway Dispatch Event
 #[derive(PartialEq, Eq, Clone, Debug, Serialize, Deserialize)]
+#[non_exhaustive]
 #[allow(missing_docs)]
 pub enum Event {
     Resume,
@@ -285,6 +308,12 @@ pub enum Event {
     InviteDelete(InviteDelete),
     WebhooksUpdate(WebhooksUpdate),
     UnknownEvent(String),
+
+    /// raw json event
+    Raw(String),
+
+    /// not a discord event, ocasionally fires with the current ping to the gateway
+    Ping(u128),
 }
 
 impl Event {
@@ -328,6 +357,8 @@ impl Event {
             Event::InviteDelete(_) => "INVITE_DELETE",
             Event::WebhooksUpdate(_) => "WEBHOOKS_UPDATE",
             Event::UnknownEvent(_) => "UNKNOWN",
+            Event::Raw(_) => "_RAW",
+            Event::Ping(_) => "_PING",
         }
     }
 }
