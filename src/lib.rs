@@ -11,10 +11,12 @@
     missing_docs,
     rust_2018_idioms,
     missing_debug_implementations,
-    broken_intra_doc_links
+    rustdoc::broken_intra_doc_links
 )]
 
-// #[cfg(feature = "cache")]
+pub(crate) const LIB_NAME: &str = "discord-api";
+
+#[cfg(feature = "cache")]
 pub mod cache;
 pub mod proto;
 

@@ -1,16 +1,12 @@
 use super::embed::Embed;
 use super::guild::GuildMember;
 use super::user::User;
-use crate::{
-    error::Error,
-    model::{
-        emoji::Emoji,
-        id::{
-            ApplicationId, AttachmentId, ChannelId, GuildId, MessageId, PackId, RoleId, StickerId,
-            WebhookId,
-        },
+use crate::model::{
+    emoji::Emoji,
+    id::{
+        ApplicationId, AttachmentId, ChannelId, GuildId, MessageId, PackId, RoleId, StickerId,
+        WebhookId,
     },
-    util::RestWrapper,
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -103,6 +99,7 @@ impl AsRef<ChannelId> for Message {
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug, Deserialize, Serialize)]
+#[allow(missing_docs)]
 pub struct MessageUpdate {
     pub id: MessageId,
     pub guild_id: Option<GuildId>,
@@ -123,6 +120,7 @@ pub struct MessageUpdate {
 }
 
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone, Hash)]
+#[allow(missing_docs)]
 pub struct MessageDelete {
     pub id: MessageId,
     pub channel_id: ChannelId,
@@ -130,6 +128,7 @@ pub struct MessageDelete {
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug, Deserialize, Serialize)]
+#[allow(missing_docs)]
 pub struct Reaction {
     /// times this emoji has been used to react
     pub count: i32,
@@ -139,7 +138,9 @@ pub struct Reaction {
     pub emoji: Emoji,
 }
 
+/// ChannelMention
 #[derive(Clone, PartialEq, Eq, Hash, Debug, Deserialize, Serialize)]
+#[allow(missing_docs)]
 pub struct ChannelMention {
     /// id of the channel
     pub id: ChannelId,
@@ -152,6 +153,7 @@ pub struct ChannelMention {
     pub name: String,
 }
 
+/// Attachment
 #[derive(Clone, PartialEq, Eq, Hash, Debug, Deserialize, Serialize)]
 pub struct Attachment {
     /// attachment id
@@ -170,6 +172,7 @@ pub struct Attachment {
     pub width: Option<i32>,
 }
 
+/// MessageActivity
 #[derive(Clone, PartialEq, Eq, Hash, Debug, Deserialize, Serialize)]
 pub struct MessageActivity {
     /// type of message activity
@@ -183,6 +186,7 @@ pub struct MessageActivity {
     pub party_id: Option<String>,
 }
 
+/// Application
 #[derive(Clone, PartialEq, Eq, Hash, Debug, Deserialize, Serialize)]
 pub struct Application {
     /// id of the application
@@ -197,6 +201,7 @@ pub struct Application {
     pub name: String,
 }
 
+/// Reference to message
 #[derive(Clone, PartialEq, Eq, Hash, Debug, Deserialize, Serialize)]
 pub struct MessageReference {
     /// id of the originating message
@@ -208,6 +213,7 @@ pub struct MessageReference {
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug, Deserialize, Serialize)]
+#[allow(missing_docs)]
 pub struct MessageSticker {
     pub id: StickerId,
     pub pack_id: PackId,
@@ -228,17 +234,17 @@ pub enum MessageStickerFormat {
     LOTTIE = 3,
 }
 
-impl RestWrapper<Message> {
-    /// Send a message in the same text channel as the original message
-    pub async fn reply(&self, content: impl AsRef<str>) -> Result<Message, Error> {
-        let reference = self.reference();
-        self.api()
-            .create_message(self.channel_id, content.as_ref(), Some(reference))
-            .await
-    }
+// impl RestWrapper<Message> {
+//     /// Send a message in the same text channel as the original message
+//     pub async fn reply(&self, content: impl AsRef<str>) -> Result<Message, Error> {
+//         let reference = self.reference();
+//         self.api()
+//             .create_message(self.channel_id, content.as_ref(), Some(reference))
+//             .await
+//     }
 
-    /// Delete this message
-    pub async fn delete(&self) -> Result<(), Error> {
-        self.api().delete_message(self.channel_id, self.id).await
-    }
-}
+//     /// Delete this message
+//     pub async fn delete(&self) -> Result<(), Error> {
+//         self.api().delete_message(self.channel_id, self.id).await
+//     }
+// }

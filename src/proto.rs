@@ -1,3 +1,4 @@
+//! Discord Gateway Protocol implementation as a state machine
 use crate::model::gateway::{Event, GatewayCommand, GatewayEvent, Identify, Resume};
 use serde_json;
 use std::collections::VecDeque;
@@ -12,7 +13,7 @@ pub struct Connection {
     /// sequence number
     seq: u64,
     session_id: String,
-    heartbeat_interval: Option<u64>,
+    heartbeat_interval: u64,
     recv_queue: VecDeque<Event>,
     send_queue: VecDeque<GatewayCommand>,
     state: State,
@@ -45,7 +46,7 @@ impl Connection {
         Connection {
             token: token.into(),
             seq: 0,
-            heartbeat_interval: None,
+            heartbeat_interval: 0,
             recv_queue: VecDeque::with_capacity(RECV_QUEUE_SIZE),
             send_queue: VecDeque::with_capacity(SEND_QUEUE_SIZE),
             state: State::Closed,
@@ -54,8 +55,7 @@ impl Connection {
     }
 
     /// Returns the heartbeat interval.
-    /// None if the connection was not established
-    pub fn heartbeat_interval(&self) -> Option<u64> {
+    pub fn heartbeat_interval(&self) -> u64 {
         self.heartbeat_interval
     }
 
@@ -91,7 +91,7 @@ impl Connection {
     }
 
     /// Processes a discord event received from the gateway
-    pub fn recv_json_str(&mut self, event: &str) -> Result<(), serde_json::Error> {
+    pub fn recv_json(&mut self, event: &str) -> Result<(), serde_json::Error> {
         let event = GatewayEvent::from_json_str(event)?;
 
         self.recv(event);
@@ -124,13 +124,13 @@ impl Connection {
 
         self.state = match &self.state {
             State::Closed => {
-                if let GatewayEvent::Hello(hello) = event {
+                if let GatewayEvent::Hello(ref hello) = event {
                     log::debug!(
                         "recv hello: heartbeat_interval= {}",
                         hello.heartbeat_interval
                     );
 
-                    self.heartbeat_interval = Some(hello.heartbeat_interval);
+                    self.heartbeat_interval = hello.heartbeat_interval;
 
                     self.send_queue
                         .push_back(GatewayCommand::Identify(Identify::new(&self.token)));
@@ -141,50 +141,81 @@ impl Connection {
                 }
             }
             State::Identify => {
-                if let GatewayEvent::Dispatch(s, Event::Ready(ready)) = event {
-                    // TODO: move all dispach event handling into one place
+                if let GatewayEvent::Dispatch(seq, Event::Ready(ref ready)) = event {
                     log::info!(
-                        "client ready: session_id= {} tag= {}",
+                        "client ready: version= {} session_id= {} tag= {} shard= {:?}",
+                        ready.version,
                         ready.session_id,
-                        ready.user.tag()
+                        ready.user.tag(),
+                        ready.shard
                     );
 
-                    self.seq = s;
-                    self.session_id = ready.session_id;
+                    self.seq = seq;
+                    self.session_id = ready.session_id.clone();
+
                     State::Ready
                 } else {
                     log::warn!("received invalid packet");
+
                     State::InvalidSession(false)
                 }
             }
-            State::Ready | State::Reconnect => {
-                match event {
-                    GatewayEvent::Dispatch(seq, event) => {
-                        log::debug!("recv dispatch: kind= {} seq= {}", event.kind(), seq);
-                        self.seq = seq;
-                        self.handle_dispatch(event);
-                    }
-                    _ => {}
-                }
-                State::Ready
-            }
+            State::Ready => State::Ready,
+            State::Reconnect => State::Reconnect,
             State::InvalidSession(resumable) => State::InvalidSession(*resumable),
+        };
+
+        // forward all dispatch events, no matter the state
+        if let GatewayEvent::Dispatch(seq, event) = event {
+            log::debug!("recv dispatch: kind= {} seq= {}", event.kind(), seq);
+
+            self.seq = seq;
+            self.recv_queue.push_back(event);
         }
     }
 
-    fn handle_dispatch(&mut self, event: Event) {
-        self.recv_queue.push_back(event);
+    /// Creates a single discord command to be sent to the gateway
+    ///
+    /// `None` if nothing to send
+    ///
+    /// # Example
+    /// ```
+    /// # use discord::proto::Connection;
+    /// # use discord::model::gateway::GatewayCommand;
+    /// # let mut conn = Connection::new("token");
+    /// conn.queue_heartbeat();
+    ///
+    /// assert_eq!(Some(GatewayCommand::Heartbeat(0)), conn.send_single());
+    /// assert_eq!(None, conn.send_single());
+    /// ```
+    pub fn send_single(&mut self) -> Option<GatewayCommand> {
+        let cmd = self.send_queue.pop_front();
+        log::trace!("sending command: {:?}", cmd);
+        cmd
     }
 
     /// Creates a single discord command to be sent to the gateway
-    pub fn send_single(&mut self) -> Option<String> {
-        self.send_queue
-            .pop_front()
+    ///
+    /// `None` if nothing to send
+    pub fn send_single_json(&mut self) -> Option<String> {
+        self.send_single()
             .map(|cmd| serde_json::to_string(&cmd).unwrap())
     }
 
     /// Create an iterator of all the commands to be sent to the gateway
+    ///
+    /// # Example
+    /// ```
+    /// # use discord::proto::Connection;
+    /// # use discord::model::gateway::GatewayCommand;
+    /// # let mut conn = Connection::new("token");
+    /// conn.queue_heartbeat();
+    ///
+    /// assert_eq!(Some(GatewayCommand::Heartbeat(0)), conn.send_iter().next());
+    /// assert_eq!(None, conn.send_iter().next());
+    /// ```
     pub fn send_iter<'a>(&'a mut self) -> impl Iterator<Item = GatewayCommand> + 'a {
+        log::trace!("sending commands {:?}", self.send_queue);
         self.send_queue.drain(..)
     }
 
@@ -192,8 +223,7 @@ impl Connection {
     ///
     /// The commands are already in json format
     pub fn send_iter_json<'a>(&'a mut self) -> impl Iterator<Item = String> + 'a {
-        self.send_queue
-            .drain(..)
+        self.send_iter()
             .map(|cmd| serde_json::to_string(&cmd).unwrap())
     }
 
@@ -202,13 +232,18 @@ impl Connection {
         self.recv_queue.drain(..)
     }
 
-    /// Clears the event queue
-    pub fn clear_events(&mut self) {
-        self.recv_queue.clear();
+    /// Get a reference to the underlying event queue
+    pub fn events_ref(&self) -> &VecDeque<Event> {
+        &self.recv_queue
     }
 
-    /// amount of events in the queue
-    pub fn num_events(&self) -> usize {
-        self.recv_queue.len()
+    /// Get a mutable reference to the underlying event queue
+    pub fn events_ref_mut(&mut self) -> &mut VecDeque<Event> {
+        &mut self.recv_queue
+    }
+
+    /// Add a command to the send queue
+    pub fn enqueue_command(&mut self, cmd: GatewayCommand) {
+        self.send_queue.push_back(cmd);
     }
 }

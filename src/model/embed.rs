@@ -1,7 +1,9 @@
+//! Embed types
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Hash, Eq, PartialEq, Serialize, Deserialize, Debug)]
+#[allow(missing_docs)]
 pub struct Embed {
     title: Option<String>,
     #[serde(rename = "type")]
@@ -19,6 +21,7 @@ pub struct Embed {
 }
 
 #[derive(Clone, Hash, Eq, PartialEq, Serialize, Deserialize, Debug)]
+#[allow(missing_docs)]
 pub struct EmbedFooter {
     text: String,
     icon_url: Option<String>,
@@ -26,6 +29,7 @@ pub struct EmbedFooter {
 }
 
 #[derive(Clone, Hash, Eq, PartialEq, Serialize, Deserialize, Debug)]
+#[allow(missing_docs)]
 pub struct EmbedImage {
     url: Option<String>,
     proxy_url: Option<String>,
@@ -34,6 +38,7 @@ pub struct EmbedImage {
 }
 
 #[derive(Clone, Hash, Eq, PartialEq, Serialize, Deserialize, Debug)]
+#[allow(missing_docs)]
 pub struct EmbedThumbnail {
     url: Option<String>,
     proxy_url: Option<String>,
@@ -42,6 +47,7 @@ pub struct EmbedThumbnail {
 }
 
 #[derive(Clone, Hash, Eq, PartialEq, Serialize, Deserialize, Debug)]
+#[allow(missing_docs)]
 pub struct EmbedVideo {
     url: Option<String>,
     height: Option<i32>,
@@ -49,12 +55,14 @@ pub struct EmbedVideo {
 }
 
 #[derive(Clone, Hash, Eq, PartialEq, Serialize, Deserialize, Debug)]
+#[allow(missing_docs)]
 pub struct EmbedProvider {
     name: Option<String>,
     url: Option<String>,
 }
 
 #[derive(Clone, Hash, Eq, PartialEq, Serialize, Deserialize, Debug)]
+#[allow(missing_docs)]
 pub struct EmbedAuthor {
     name: Option<String>,
     url: Option<String>,
@@ -63,6 +71,7 @@ pub struct EmbedAuthor {
 }
 
 #[derive(Clone, Hash, Eq, PartialEq, Serialize, Deserialize, Debug)]
+#[allow(missing_docs)]
 pub struct EmbedFields {
     name: String,
     value: String,

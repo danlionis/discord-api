@@ -7,17 +7,16 @@ version = "0.1.0"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-async-std = "1.8"
-chrono = { version = "0.4", features = ["serde"] }
-dashmap = { version = "3.11", optional = true }
-hyper = { version = "0.14", features = ["http1", "client", "tcp"] }
-hyper-tls = "0.5"
-log = "0.4" 
-serde = { version = "1.0", features = ["derive"] }
+log = "0.4"
+url = "2.2"
+http = "0.2"
 serde_json = "1.0"
 serde_repr = "0.1"
-url = "2.2"
-lru = "0.7.0"
+serde = { version = "1.0", features = ["derive"] }
+chrono = { version = "0.4", features = ["serde"] }
+lru = { version = "0.7.0", optional = true }
+dashmap = { version = "3.11", optional = true }
+reqwest = { version = "0.11", features = ["json"], optional = true }
 
 [dev-dependencies]
 env_logger = "0.9"
@@ -29,10 +28,9 @@ futures = "0.3"
 
 
 [features]
-
-full = [ "cache" ]
-
-cache = [ "dashmap" ]
+full = ["cache", "reqwest"]
+cache = ["dashmap", "lru"]
+rest = ["reqwest"]
 
 [package.metadata.docs.rs]
 all-features = true

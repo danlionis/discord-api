@@ -134,27 +134,3 @@ impl<'de> Visitor<'de> for SnowflakeVisitor {
             .map_err(|_| serde::de::Error::custom("unknown value"))
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use serde_test::{assert_tokens, Token};
-
-    // #[test]
-    // fn safe_integer() {
-    //     let safe_int = Snowflake::from(123);
-    //     assert_tokens(&safe_int, &[Token::U64(123)]);
-    // }
-
-    // #[test]
-    // fn max_safe_integer() {
-    //     let max_safe_int = Snowflake::from(MAX_SAFE_INTEGER);
-    //     assert_tokens(&max_safe_int, &[Token::U64(9007199254740991)]);
-    // }
-
-    // #[test]
-    // fn unsafe_integer() {
-    //     let unsafe_int = Snowflake::from(MAX_SAFE_INTEGER + 1);
-    //     assert_tokens(&unsafe_int, &[Token::String("9007199254740992")]);
-    // }
-}

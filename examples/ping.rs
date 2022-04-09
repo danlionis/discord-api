@@ -1,9 +1,9 @@
-use std::{error::Error, time::Duration};
+use std::{error::Error, sync::Arc, time::Duration};
 
 use discord::{
     model::gateway::Event,
     proto::{Connection, State},
-    rest::Rest,
+    rest::{Client, CreateMessageParams},
 };
 use futures::{
     future::{poll_fn, Either},
@@ -23,21 +23,23 @@ async fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
     // create Discord Rest Client
-    let rest = Rest::new(&token);
+    let rest = Arc::new(Client::new(token.to_string()));
 
     // connect to websocket
-    let url = "wss://gateway.discord.gg/?v=9";
+    let gateway_info = rest.get_gateway_bot().await?;
+    let mut url = gateway_info.url;
+    url.push_str("/?v=9");
+    let url = url.as_str();
     let (mut socket, _) = ws::connect_async(url).await?;
 
     // initialize connection and receive first hello packet
     let mut conn = Connection::new(token);
     let hello = socket.next().await.unwrap()?;
     let hello = hello.to_text()?;
-    conn.recv_json_str(hello)?;
+    conn.recv_json(hello)?;
 
     // create heartbeat interval
-    let mut interval =
-        tokio::time::interval(Duration::from_millis(conn.heartbeat_interval().unwrap()));
+    let mut interval = tokio::time::interval(Duration::from_millis(conn.heartbeat_interval()));
 
     loop {
         match conn.state() {
@@ -61,20 +63,21 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 conn.queue_heartbeat();
             }
             Either::Right((Some(Ok(msg)), _)) => {
-                conn.recv_json_str(msg.to_text()?)?;
+                conn.recv_json(msg.to_text()?)?;
 
                 for event in conn.events() {
-                    let r = rest.clone();
+                    let r = Arc::clone(&rest);
                     handle_event(event, r);
                 }
             }
             _ => {
-                log::error!("an error occured, closing connections and reconnecting");
+                log::error!("an error occured, closing connection and reconnecting");
                 socket = reconnect_socket(socket, url).await?;
                 conn.reconnect();
             }
         }
 
+        // iterate through all packets generated and send them to the gateway
         for s in conn.send_iter_json() {
             socket.send(ws::tungstenite::Message::Text(s)).await?;
         }
@@ -93,13 +96,12 @@ where
     Ok(socket)
 }
 
-fn handle_event(event: Event, rest: Rest) {
+fn handle_event(event: Event, rest: Arc<Client>) {
     if let Event::MessageCreate(msg) = event {
         if msg.content.contains("!ping") {
             tokio::spawn(async move {
-                rest.create_message(msg.channel_id, "Pong", None)
-                    .await
-                    .unwrap();
+                let params = CreateMessageParams::default().content("Pong");
+                rest.create_message(msg.channel_id, params).await.unwrap();
             });
         }
     }

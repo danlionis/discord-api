@@ -29,6 +29,7 @@ pub enum GatewayEvent {
 }
 
 impl GatewayEvent {
+    /// Get the event type
     pub fn kind(&self) -> &str {
         match self {
             GatewayEvent::Dispatch(_, _) => "DISPATCH",

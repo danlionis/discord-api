@@ -4,59 +4,60 @@ use crate::model::gateway::Event;
 use crate::model::{id::MessageId, Message, User};
 use lru::LruCache;
 use std::fmt::Debug;
-use std::sync::{Arc, RwLock, RwLockReadGuard};
+use std::sync::{RwLock, RwLockReadGuard};
 use std::time::Instant;
 
+/// Discord Cache
 #[derive(Debug)]
 pub struct Cache {
-    inner: Arc<Inner>,
-}
-
-impl Cache {
-    pub fn new() -> Self {
-        CacheBuilder::new().build()
-    }
-
-    pub fn messages(&self) -> RwLockReadGuard<'_, LruCache<MessageId, Message>> {
-        self.inner.messages.read().unwrap()
-    }
-
-    pub fn user(&self) -> RwLockReadGuard<'_, Option<User>> {
-        self.inner.user.read().unwrap()
-    }
-
-    pub fn connected_since(&self) -> Option<Instant> {
-        self.inner.connected_since.read().unwrap().clone()
-    }
-}
-
-impl Clone for Cache {
-    fn clone(&self) -> Self {
-        Cache {
-            inner: Arc::clone(&self.inner),
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct Inner {
     messages: RwLock<LruCache<MessageId, Message>>,
     connected_since: RwLock<Option<Instant>>,
     user: RwLock<Option<User>>,
 }
 
+impl Default for Cache {
+    fn default() -> Self {
+        Cache {
+            connected_since: Default::default(),
+            messages: RwLock::new(LruCache::new(1024)),
+            user: Default::default(),
+        }
+    }
+}
+
 impl Cache {
+    /// Create a new cache
+    pub fn new() -> Self {
+        Cache::default()
+    }
+
+    /// Get a reference to all messages
+    pub fn messages(&self) -> RwLockReadGuard<'_, LruCache<MessageId, Message>> {
+        self.messages.read().unwrap()
+    }
+
+    /// Get a reference to the current user
+    pub fn user(&self) -> RwLockReadGuard<'_, Option<User>> {
+        self.user.read().unwrap()
+    }
+
+    /// Get the time since connected
+    pub fn connected_since(&self) -> Option<Instant> {
+        self.connected_since.read().unwrap().clone()
+    }
+
+    /// Update the cache with a new event
     pub fn update(&mut self, event: &Event) {
         match event {
             Event::Ready(ready) => {
-                let mut connected_since = self.inner.connected_since.write().unwrap();
+                let mut connected_since = self.connected_since.write().unwrap();
                 *connected_since = Some(Instant::now());
 
-                let mut user = self.inner.user.write().unwrap();
+                let mut user = self.user.write().unwrap();
                 *user = Some(ready.user.clone());
             }
             Event::MessageCreate(msg) => {
-                if let Ok(mut messages) = self.inner.messages.write() {
+                if let Ok(mut messages) = self.messages.write() {
                     messages.put(msg.id, *msg.clone());
                 }
             }
@@ -65,30 +66,5 @@ impl Cache {
             }
             _ => {}
         }
-    }
-}
-
-pub struct CacheBuilder {
-    message_cap: usize,
-}
-
-impl CacheBuilder {
-    fn new() -> Self {
-        CacheBuilder { message_cap: 1024 }
-    }
-
-    fn build(self) -> Cache {
-        Cache {
-            inner: Arc::new(Inner {
-                connected_since: Default::default(),
-                messages: RwLock::new(LruCache::new(self.message_cap)),
-                user: Default::default(),
-            }),
-        }
-    }
-
-    fn message_cap(mut self, cap: usize) -> CacheBuilder {
-        self.message_cap = cap;
-        self
     }
 }

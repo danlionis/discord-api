@@ -2,12 +2,10 @@
 
 use std::convert::From;
 
-// Discord Error Types
+/// Discord Error Types
 #[derive(Debug)]
 pub enum Error {
     // DiscordError(DiscordError),
-    /// Rest Error
-    RequestError(hyper::Error),
     /// Api Error
     ApiError(ApiError),
     /// Serde parse error
@@ -26,12 +24,6 @@ pub enum Error {
 impl From<serde_json::Error> for Error {
     fn from(err: serde_json::Error) -> Self {
         Self::ParseError(err)
-    }
-}
-
-impl From<hyper::Error> for Error {
-    fn from(err: hyper::Error) -> Self {
-        Self::RequestError(err)
     }
 }
 

@@ -1,3 +1,4 @@
+//! Channel types
 use crate::model::{
     id::{ApplicationId, ChannelId, GuildId, MessageId, UserId},
     PermissonOverwrite, User,
