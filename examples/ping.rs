@@ -1,14 +1,10 @@
-use std::{error::Error, sync::Arc, time::Duration};
-
 use discord::{
     model::gateway::Event,
-    proto::{Connection, State},
+    proto::Connection,
     rest::{Client, CreateMessageParams},
 };
-use futures::{
-    future::{poll_fn, Either},
-    prelude::*,
-};
+use futures::{sink::SinkExt, stream::StreamExt};
+use std::{error::Error, sync::Arc, time::Duration};
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::TcpStream,
@@ -26,10 +22,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let rest = Arc::new(Client::new(token.to_string()));
 
     // connect to websocket
-    let gateway_info = rest.get_gateway_bot().await?;
-    let mut url = gateway_info.url;
-    url.push_str("/?v=9");
-    let url = url.as_str();
+    let mut gateway_info = rest.get_gateway_bot().await?;
+    gateway_info.url.push_str("/?v=9");
+    let url = gateway_info.url.as_str();
     let (mut socket, _) = ws::connect_async(url).await?;
 
     // initialize connection and receive first hello packet
@@ -37,51 +32,75 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let hello = socket.next().await.unwrap()?;
     let hello = hello.to_text()?;
     conn.recv_json(hello)?;
+    let mut content = String::new();
 
     // create heartbeat interval
     let mut interval = tokio::time::interval(Duration::from_millis(conn.heartbeat_interval()));
 
     loop {
-        match conn.state() {
-            State::Reconnect | State::InvalidSession(true) => {
-                socket = reconnect_socket(socket, url).await?;
-                conn.resume();
-            }
-            State::InvalidSession(false) => {
-                socket = reconnect_socket(socket, url).await?;
-                conn.reconnect();
-            }
-            _ => {}
+        content.clear();
+
+        // reconnect the websocket if requested
+        if conn.should_reconnect() {
+            socket = reconnect_socket(socket, url).await?;
         }
 
-        // select between the interval and the websocket
-        let select =
-            futures::future::select(poll_fn(|mut cx| interval.poll_tick(&mut cx)), socket.next());
-
-        match select.await {
-            Either::Left(_) => {
+        tokio::select! {
+            _ = interval.tick() => {
                 conn.queue_heartbeat();
             }
-            Either::Right((Some(Ok(msg)), _)) => {
-                conn.recv_json(msg.to_text()?)?;
-
-                for event in conn.events() {
-                    let r = Arc::clone(&rest);
-                    handle_event(event, r);
+            ws_msg = socket.next() => {
+                match ws_msg {
+                    Some(Ok(msg)) => {
+                        handle_ws_message(msg, &mut conn, &rest)?;
+                    }
+                    _ => {
+                        log::error!("an error occured, closing connection and reconnecting");
+                        conn.close();
+                        socket = reconnect_socket(socket, url).await?;
+                    }
                 }
             }
-            _ => {
-                log::error!("an error occured, closing connection and reconnecting");
-                socket = reconnect_socket(socket, url).await?;
-                conn.reconnect();
-            }
-        }
+        };
 
         // iterate through all packets generated and send them to the gateway
         for s in conn.send_iter_json() {
             socket.send(ws::tungstenite::Message::Text(s)).await?;
         }
     }
+}
+
+fn handle_ws_message(
+    msg: ws::tungstenite::Message,
+    conn: &mut Connection,
+    rest: &Arc<Client>,
+) -> Result<(), Box<dyn Error>> {
+    conn.recv_json(msg.to_text()?)?;
+
+    let mut content = String::new();
+
+    for event in conn.events() {
+        if let Event::MessageCreate(m) = &event {
+            content = m.content.clone();
+        }
+
+        let rest = Arc::clone(rest);
+        tokio::spawn(async move {
+            let rest = Arc::as_ref(&rest);
+            handle_event(event, rest).await
+        });
+    }
+
+    if content.contains("resume") {
+        log::warn!("request resume");
+        conn.resume();
+    }
+    if content.contains("reconnect") {
+        log::warn!("request reconnect");
+        conn.reconnect();
+    }
+
+    Ok(())
 }
 
 async fn reconnect_socket<S>(
@@ -91,18 +110,17 @@ async fn reconnect_socket<S>(
 where
     S: AsyncWrite + AsyncRead + Unpin,
 {
+    log::info!("reconnecting socket");
     let _ = socket.close(None).await;
     let (socket, _) = ws::connect_async(url).await?;
     Ok(socket)
 }
 
-fn handle_event(event: Event, rest: Arc<Client>) {
+async fn handle_event(event: Event, rest: &Client) {
     if let Event::MessageCreate(msg) = event {
-        if msg.content.contains("!ping") {
-            tokio::spawn(async move {
-                let params = CreateMessageParams::default().content("Pong");
-                rest.create_message(msg.channel_id, params).await.unwrap();
-            });
+        if msg.content.contains("ping") {
+            let params = CreateMessageParams::default().content("Pong");
+            rest.create_message(msg.channel_id, params).await.unwrap();
         }
     }
 }

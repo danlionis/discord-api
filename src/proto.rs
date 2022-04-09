@@ -19,7 +19,7 @@ pub struct Connection {
     state: State,
 }
 
-/// State of the gatway connection
+/// State of the gateway connection
 #[derive(Clone, Debug)]
 pub enum State {
     /// No connection established
@@ -28,16 +28,58 @@ pub enum State {
     Identify,
     /// Ready
     Ready,
-    /// Attempt to reconnect and resume immediately
+    /// Attempt to reconnect
     Reconnect,
-    /// Invalid session, client should reconnect, possibly resumable
-    InvalidSession(
-        /// resumable
-        bool,
-    ),
+    /// Resume immediately
+    Resume,
+    /// Resuming a session
+    Resuming,
 }
 
 impl Connection {
+    /// Close connection
+    ///
+    /// Remember to close the connection with a close code of 1000 or 1001
+    pub fn close(&mut self) -> u16 {
+        *self = Connection::new(self.token.clone());
+        1000
+    }
+
+    /// Reconnect
+    pub fn reconnect(&mut self) {
+        self.state = State::Reconnect;
+    }
+
+    /// Resume
+    pub fn resume(&mut self) {
+        self.state = State::Resume;
+    }
+
+    /// Add a command to the send queue
+    pub fn enqueue_command(&mut self, cmd: GatewayCommand) {
+        self.send_queue.push_back(cmd);
+    }
+
+    /// Create an iterator of all the events received from the gateway
+    pub fn events<'a>(&'a mut self) -> impl Iterator<Item = Event> + 'a {
+        self.recv_queue.drain(..)
+    }
+
+    /// Get a reference to the underlying event queue
+    pub fn events_ref(&self) -> &VecDeque<Event> {
+        &self.recv_queue
+    }
+
+    /// Get a mutable reference to the underlying event queue
+    pub fn events_ref_mut(&mut self) -> &mut VecDeque<Event> {
+        &mut self.recv_queue
+    }
+
+    /// Returns the heartbeat interval.
+    pub fn heartbeat_interval(&self) -> u64 {
+        self.heartbeat_interval
+    }
+
     /// Create a new connection to the discord gateway
     pub fn new<S>(token: S) -> Self
     where
@@ -50,38 +92,8 @@ impl Connection {
             recv_queue: VecDeque::with_capacity(RECV_QUEUE_SIZE),
             send_queue: VecDeque::with_capacity(SEND_QUEUE_SIZE),
             state: State::Closed,
-            session_id: "".to_owned(),
+            session_id: String::new(),
         }
-    }
-
-    /// Returns the heartbeat interval.
-    pub fn heartbeat_interval(&self) -> u64 {
-        self.heartbeat_interval
-    }
-
-    /// get the current state
-    pub fn state(&self) -> &State {
-        &self.state
-    }
-
-    /// Resume a reconnected session
-    pub fn resume(&mut self) {
-        self.state = State::Reconnect;
-        let cmd = GatewayCommand::Resume(Resume::new(
-            self.token.clone(),
-            self.session_id.clone(),
-            self.seq,
-        ));
-        self.send_queue.push_back(cmd);
-    }
-
-    /// Reconnect with initial handshake
-    pub fn reconnect(&mut self) {
-        self.state = State::Closed;
-        self.seq = 0;
-        self.session_id = "".to_owned();
-
-        self.send_queue.clear();
     }
 
     /// queue a heartbeat packet to be sent to the gateway
@@ -90,26 +102,26 @@ impl Connection {
             .push_back(GatewayCommand::Heartbeat(self.seq))
     }
 
-    /// Processes a discord event received from the gateway
-    pub fn recv_json(&mut self, event: &str) -> Result<(), serde_json::Error> {
-        let event = GatewayEvent::from_json_str(event)?;
-
-        self.recv(event);
-
-        Ok(())
-    }
-
     /// Processes discord events received from the gateway
     pub fn recv(&mut self, event: GatewayEvent) {
-        log::debug!("recv event: {}", event.kind());
+        log::debug!(
+            "recv event: kind= {} state= {:?}",
+            event.kind(),
+            self.state()
+        );
+        log::trace!("gateway event= {:?}", event);
 
         if let GatewayEvent::InvalidSession(resumable) = event {
-            self.state = State::InvalidSession(resumable);
+            self.state = if resumable {
+                State::Resume
+            } else {
+                State::Reconnect
+            };
             return;
         }
 
         if let GatewayEvent::Reconnect = event {
-            self.state = State::Reconnect;
+            self.state = State::Resume;
             return;
         }
 
@@ -123,7 +135,10 @@ impl Connection {
         }
 
         self.state = match &self.state {
-            State::Closed => {
+            State::Ready => State::Ready,
+            State::Closed | State::Reconnect => {
+                // TODO: if we detect a hello packet we can assume that the underlying socket has
+                // been reconnected. Handle accordingly
                 if let GatewayEvent::Hello(ref hello) = event {
                     log::debug!(
                         "recv hello: heartbeat_interval= {}",
@@ -140,8 +155,8 @@ impl Connection {
                     State::Closed
                 }
             }
-            State::Identify => {
-                if let GatewayEvent::Dispatch(seq, Event::Ready(ref ready)) = event {
+            State::Identify => match event {
+                GatewayEvent::Dispatch(_, Event::Ready(ref ready)) => {
                     log::info!(
                         "client ready: version= {} session_id= {} tag= {} shard= {:?}",
                         ready.version,
@@ -150,56 +165,63 @@ impl Connection {
                         ready.shard
                     );
 
-                    self.seq = seq;
                     self.session_id = ready.session_id.clone();
-
                     State::Ready
-                } else {
-                    log::warn!("received invalid packet");
+                }
+                _ => {
+                    log::warn!("expected ready event, received: {:?}", &event);
+                    State::Identify
+                }
+            },
+            State::Resuming => match event {
+                GatewayEvent::Dispatch(_, Event::Resume) => {
+                    log::info!("resumed: session_id= {}", self.session_id);
+                    State::Ready
+                }
+                _ => State::Resuming,
+            },
+            State::Resume => {
+                if let GatewayEvent::Hello(ref hello) = event {
+                    log::debug!(
+                        "recv hello: heartbeat_interval= {}",
+                        hello.heartbeat_interval
+                    );
 
-                    State::InvalidSession(false)
+                    self.heartbeat_interval = hello.heartbeat_interval;
+
+                    self.send_queue
+                        .push_back(GatewayCommand::Resume(Resume::new(
+                            self.token.clone(),
+                            self.session_id.clone(),
+                            self.seq,
+                        )));
+                    State::Resuming
+                } else {
+                    log::debug!("expected hello packet");
+                    State::Closed
                 }
             }
-            State::Ready => State::Ready,
-            State::Reconnect => State::Reconnect,
-            State::InvalidSession(resumable) => State::InvalidSession(*resumable),
         };
 
         // forward all dispatch events, no matter the state
         if let GatewayEvent::Dispatch(seq, event) = event {
             log::debug!("recv dispatch: kind= {} seq= {}", event.kind(), seq);
 
+            if seq < self.seq {
+                log::warn!("received out of order packet");
+            }
             self.seq = seq;
             self.recv_queue.push_back(event);
         }
     }
 
-    /// Creates a single discord command to be sent to the gateway
-    ///
-    /// `None` if nothing to send
-    ///
-    /// # Example
-    /// ```
-    /// # use discord::proto::Connection;
-    /// # use discord::model::gateway::GatewayCommand;
-    /// # let mut conn = Connection::new("token");
-    /// conn.queue_heartbeat();
-    ///
-    /// assert_eq!(Some(GatewayCommand::Heartbeat(0)), conn.send_single());
-    /// assert_eq!(None, conn.send_single());
-    /// ```
-    pub fn send_single(&mut self) -> Option<GatewayCommand> {
-        let cmd = self.send_queue.pop_front();
-        log::trace!("sending command: {:?}", cmd);
-        cmd
-    }
+    /// Processes a discord event received from the gateway
+    pub fn recv_json(&mut self, event: &str) -> Result<(), serde_json::Error> {
+        let event = GatewayEvent::from_json_str(event)?;
 
-    /// Creates a single discord command to be sent to the gateway
-    ///
-    /// `None` if nothing to send
-    pub fn send_single_json(&mut self) -> Option<String> {
-        self.send_single()
-            .map(|cmd| serde_json::to_string(&cmd).unwrap())
+        self.recv(event);
+
+        Ok(())
     }
 
     /// Create an iterator of all the commands to be sent to the gateway
@@ -227,23 +249,47 @@ impl Connection {
             .map(|cmd| serde_json::to_string(&cmd).unwrap())
     }
 
-    /// Create an iterator of all the events received from the gateway
-    pub fn events<'a>(&'a mut self) -> impl Iterator<Item = Event> + 'a {
-        self.recv_queue.drain(..)
+    /// Creates a single discord command to be sent to the gateway
+    ///
+    /// `None` if nothing to send
+    ///
+    /// # Example
+    /// ```
+    /// # use discord::proto::Connection;
+    /// # use discord::model::gateway::GatewayCommand;
+    /// # let mut conn = Connection::new("token");
+    /// conn.queue_heartbeat();
+    ///
+    /// assert_eq!(Some(GatewayCommand::Heartbeat(0)), conn.send_single());
+    /// assert_eq!(None, conn.send_single());
+    /// ```
+    pub fn send_single(&mut self) -> Option<GatewayCommand> {
+        let cmd = self.send_queue.pop_front();
+        log::trace!("sending command: {:?}", cmd);
+        cmd
     }
 
-    /// Get a reference to the underlying event queue
-    pub fn events_ref(&self) -> &VecDeque<Event> {
-        &self.recv_queue
+    /// Creates a single discord command to be sent to the gateway
+    ///
+    /// # Example
+    /// see [send_single]
+    ///
+    /// [send_single]: Connection::send_single
+    pub fn send_single_json(&mut self) -> Option<String> {
+        self.send_single()
+            .map(|cmd| serde_json::to_string(&cmd).unwrap())
     }
 
-    /// Get a mutable reference to the underlying event queue
-    pub fn events_ref_mut(&mut self) -> &mut VecDeque<Event> {
-        &mut self.recv_queue
+    /// Returns true if the underlying gateway connection has to be reconnected
+    pub fn should_reconnect(&self) -> bool {
+        match self.state {
+            State::Resume | State::Reconnect => true,
+            _ => false,
+        }
     }
 
-    /// Add a command to the send queue
-    pub fn enqueue_command(&mut self, cmd: GatewayCommand) {
-        self.send_queue.push_back(cmd);
+    /// get the current state
+    pub fn state(&self) -> &State {
+        &self.state
     }
 }
