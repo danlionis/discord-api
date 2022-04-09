@@ -23,6 +23,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // connect to websocket
     let mut gateway_info = rest.get_gateway_bot().await?;
+    log::debug!("gateway: {:?}", gateway_info);
     gateway_info.url.push_str("/?v=9");
     let url = gateway_info.url.as_str();
     let (mut socket, _) = ws::connect_async(url).await?;
@@ -32,14 +33,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let hello = socket.next().await.unwrap()?;
     let hello = hello.to_text()?;
     conn.recv_json(hello)?;
-    let mut content = String::new();
 
     // create heartbeat interval
     let mut interval = tokio::time::interval(Duration::from_millis(conn.heartbeat_interval()));
 
     loop {
-        content.clear();
-
         // reconnect the websocket if requested
         if conn.should_reconnect() {
             socket = reconnect_socket(socket, url).await?;
@@ -52,11 +50,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
             ws_msg = socket.next() => {
                 match ws_msg {
                     Some(Ok(msg)) => {
-                        handle_ws_message(msg, &mut conn, &rest)?;
+                        handle_ws_message(msg, &mut conn, &rest).await?;
                     }
                     _ => {
-                        log::error!("an error occured, closing connection and reconnecting");
-                        conn.close();
+                        log::info!("an error occured, closing connection and reconnecting");
                         socket = reconnect_socket(socket, url).await?;
                     }
                 }
@@ -65,16 +62,21 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
         // iterate through all packets generated and send them to the gateway
         for s in conn.send_iter_json() {
-            socket.send(ws::tungstenite::Message::Text(s)).await?;
+            socket
+                .send(ws::tungstenite::Message::Text(s))
+                .await
+                .expect("could not send");
         }
     }
 }
 
-fn handle_ws_message(
+async fn handle_ws_message(
     msg: ws::tungstenite::Message,
     conn: &mut Connection,
     rest: &Arc<Client>,
 ) -> Result<(), Box<dyn Error>> {
+    // TODO: handle close frames
+
     conn.recv_json(msg.to_text()?)?;
 
     let mut content = String::new();
@@ -93,11 +95,11 @@ fn handle_ws_message(
 
     if content.contains("resume") {
         log::warn!("request resume");
-        conn.resume();
+        conn.recv(discord::model::gateway::GatewayEvent::Reconnect);
     }
     if content.contains("reconnect") {
         log::warn!("request reconnect");
-        conn.reconnect();
+        conn.recv(discord::model::gateway::GatewayEvent::InvalidSession(false));
     }
 
     Ok(())

@@ -17,6 +17,7 @@ pub struct Connection {
     recv_queue: VecDeque<Event>,
     send_queue: VecDeque<GatewayCommand>,
     state: State,
+    retries_left: u8,
 }
 
 /// State of the gateway connection
@@ -32,8 +33,8 @@ pub enum State {
     Reconnect,
     /// Resume immediately
     Resume,
-    /// Resuming a session
-    Resuming,
+    /// Replaying missed events
+    Replaying,
 }
 
 impl Connection {
@@ -93,6 +94,7 @@ impl Connection {
             send_queue: VecDeque::with_capacity(SEND_QUEUE_SIZE),
             state: State::Closed,
             session_id: String::new(),
+            retries_left: 5,
         }
     }
 
@@ -111,105 +113,85 @@ impl Connection {
         );
         log::trace!("gateway event= {:?}", event);
 
+        // an invalid session can potentially be resumed
         if let GatewayEvent::InvalidSession(resumable) = event {
             self.state = if resumable {
                 State::Resume
             } else {
+                self.retries_left -= 1;
                 State::Reconnect
             };
             return;
         }
 
+        // a reconnect event can be resumed after the socket has reconnected to the gateway
         if let GatewayEvent::Reconnect = event {
             self.state = State::Resume;
             return;
         }
 
+        // queue a heartbeat if it was requested
         if let GatewayEvent::Heartbeat(_) = event {
             self.queue_heartbeat();
             return;
         }
 
+        // do nothing if hearbeat was ack'd
         if let GatewayEvent::HeartbeatAck = event {
+            // TODO: maybe keep track if the heartbeat was ack'd and if not send it again
             return;
         }
 
-        self.state = match &self.state {
-            State::Ready => State::Ready,
-            State::Closed | State::Reconnect => {
-                // TODO: if we detect a hello packet we can assume that the underlying socket has
-                // been reconnected. Handle accordingly
-                if let GatewayEvent::Hello(ref hello) = event {
-                    log::debug!(
-                        "recv hello: heartbeat_interval= {}",
-                        hello.heartbeat_interval
-                    );
+        // hello events indicate that the underlying socket has (re)connected to the gateway
+        if let GatewayEvent::Hello(ref hello) = event {
+            log::debug!(
+                "recv hello: heartbeat_interval= {}",
+                hello.heartbeat_interval
+            );
 
-                    self.heartbeat_interval = hello.heartbeat_interval;
+            self.heartbeat_interval = hello.heartbeat_interval;
 
-                    self.send_queue
-                        .push_back(GatewayCommand::Identify(Identify::new(&self.token)));
-                    State::Identify
-                } else {
-                    log::debug!("expected hello packet");
-                    State::Closed
-                }
-            }
-            State::Identify => match event {
-                GatewayEvent::Dispatch(_, Event::Ready(ref ready)) => {
-                    log::info!(
-                        "client ready: version= {} session_id= {} tag= {} shard= {:?}",
-                        ready.version,
-                        ready.session_id,
-                        ready.user.tag(),
-                        ready.shard
-                    );
-
-                    self.session_id = ready.session_id.clone();
-                    State::Ready
-                }
-                _ => {
-                    log::warn!("expected ready event, received: {:?}", &event);
-                    State::Identify
-                }
-            },
-            State::Resuming => match event {
-                GatewayEvent::Dispatch(_, Event::Resume) => {
-                    log::info!("resumed: session_id= {}", self.session_id);
-                    State::Ready
-                }
-                _ => State::Resuming,
-            },
-            State::Resume => {
-                if let GatewayEvent::Hello(ref hello) = event {
-                    log::debug!(
-                        "recv hello: heartbeat_interval= {}",
-                        hello.heartbeat_interval
-                    );
-
-                    self.heartbeat_interval = hello.heartbeat_interval;
-
+            self.state = match self.state {
+                State::Resume => {
                     self.send_queue
                         .push_back(GatewayCommand::Resume(Resume::new(
                             self.token.clone(),
                             self.session_id.clone(),
                             self.seq,
                         )));
-                    State::Resuming
-                } else {
-                    log::debug!("expected hello packet");
-                    State::Closed
+                    State::Replaying
+                }
+                // client got reconnected
+                _ => {
+                    self.send_queue
+                        .push_back(GatewayCommand::Identify(Identify::new(&self.token)));
+                    State::Identify
                 }
             }
-        };
+        }
+
+        if let GatewayEvent::Dispatch(_seq, Event::Ready(ref ready)) = event {
+            log::info!(
+                "client ready: version= {} session_id= {} tag= {} shard= {:?}",
+                ready.version,
+                ready.session_id,
+                ready.user.tag(),
+                ready.shard
+            );
+
+            self.session_id = ready.session_id.clone();
+            self.state = State::Ready;
+        }
+
+        if let GatewayEvent::Dispatch(_seq, Event::Resume) = event {
+            log::info!("resumed: session_id= {}", self.session_id);
+            self.state = State::Ready;
+        }
 
         // forward all dispatch events, no matter the state
         if let GatewayEvent::Dispatch(seq, event) = event {
             log::debug!("recv dispatch: kind= {} seq= {}", event.kind(), seq);
 
-            if seq < self.seq {
-                log::warn!("received out of order packet");
-            }
             self.seq = seq;
             self.recv_queue.push_back(event);
         }
