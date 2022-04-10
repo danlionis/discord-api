@@ -3,7 +3,7 @@ use serde::Serialize;
 
 use crate::model::id::StickerId;
 use crate::model::Attachment;
-use crate::model::{embed::Embed, id::ChannelId, MessageReference};
+use crate::model::{id::ChannelId, Embed, MessageReference};
 
 use crate::rest::Route;
 
