@@ -1,7 +1,7 @@
 use discord::{
     model::gateway::Event,
     proto::Connection,
-    rest::{Client, CreateMessageParams},
+    rest::{client::Client, CreateMessageParams},
 };
 use futures::{sink::SinkExt, stream::StreamExt};
 use std::{error::Error, sync::Arc, time::Duration};
@@ -10,7 +10,13 @@ use tokio::{
     net::TcpStream,
 };
 use tokio_tungstenite as ws;
-use ws::{MaybeTlsStream, WebSocketStream};
+use ws::{
+    tungstenite::{
+        protocol::{frame::coding::CloseCode as WsCloseCode, CloseFrame},
+        Message,
+    },
+    MaybeTlsStream, WebSocketStream,
+};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -43,6 +49,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
             socket = reconnect_socket(socket, url).await?;
         }
 
+        if let Some(code) = conn.failed() {
+            return Err(code.into());
+        }
+
         tokio::select! {
             _ = interval.tick() => {
                 conn.queue_heartbeat();
@@ -54,7 +64,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     }
                     _ => {
                         log::info!("an error occured, closing connection and reconnecting");
-                        socket = reconnect_socket(socket, url).await?;
+                        socket = reconnect_socket( socket, url).await?;
                     }
                 }
             }
@@ -75,31 +85,23 @@ async fn handle_ws_message(
     conn: &mut Connection,
     rest: &Arc<Client>,
 ) -> Result<(), Box<dyn Error>> {
-    // TODO: handle close frames
-
-    conn.recv_json(msg.to_text()?)?;
-
-    let mut content = String::new();
-
-    for event in conn.events() {
-        if let Event::MessageCreate(m) = &event {
-            content = m.content.clone();
+    match msg {
+        Message::Close(Some(CloseFrame {
+            code,
+            reason: _reason,
+        })) => {
+            conn.recv_close_code(code);
         }
+        Message::Text(msg) => {
+            conn.recv_json(&msg)?;
 
-        let rest = Arc::clone(rest);
-        tokio::spawn(async move {
-            let rest = Arc::as_ref(&rest);
-            handle_event(event, rest).await
-        });
-    }
-
-    if content.contains("resume") {
-        log::warn!("request resume");
-        conn.recv(discord::model::gateway::GatewayEvent::Reconnect);
-    }
-    if content.contains("reconnect") {
-        log::warn!("request reconnect");
-        conn.recv(discord::model::gateway::GatewayEvent::InvalidSession(false));
+            for event in conn.events() {
+                tokio::spawn(handle_event(event, Arc::clone(rest)));
+            }
+        }
+        msg => {
+            log::info!("ignoring message: {:?}", msg);
+        }
     }
 
     Ok(())
@@ -118,7 +120,7 @@ where
     Ok(socket)
 }
 
-async fn handle_event(event: Event, rest: &Client) {
+async fn handle_event(event: Event, rest: Arc<Client>) {
     if let Event::MessageCreate(msg) = event {
         if msg.content.contains("ping") {
             let params = CreateMessageParams::default().content("Pong");

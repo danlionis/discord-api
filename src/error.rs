@@ -1,7 +1,5 @@
 //! Error types
 
-use std::convert::From;
-
 /// Discord Error Types
 #[derive(Debug)]
 pub enum Error {
@@ -20,6 +18,8 @@ pub enum Error {
 // pub enum DiscordError {
 //     SendError,
 // }
+
+use std::fmt::Display;
 
 impl From<serde_json::Error> for Error {
     fn from(err: serde_json::Error) -> Self {
@@ -59,6 +59,14 @@ pub enum CloseCode {
     DisallowedIntents = 4014,
 }
 
+impl Display for CloseCode {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        write!(fmt, "{:?}", self)
+    }
+}
+
+impl std::error::Error for CloseCode {}
+
 impl From<u16> for CloseCode {
     fn from(v: u16) -> Self {
         match v {
@@ -76,6 +84,16 @@ impl From<u16> for CloseCode {
             4013 => CloseCode::InvalidIntents,
             4014 => CloseCode::DisallowedIntents,
             _ => CloseCode::UnknownError,
+        }
+    }
+}
+
+impl CloseCode {
+    /// Returns true if the connection can be recovered after receiving this close code
+    pub fn is_recoverable(&self) -> bool {
+        match self {
+            CloseCode::AlreadyAuthenticated | CloseCode::SessionTimedOut => true,
+            _ => false,
         }
     }
 }
