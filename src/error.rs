@@ -40,23 +40,23 @@ impl From<CloseCode> for Error {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
-#[repr(u16)]
 #[allow(missing_docs)]
 pub enum CloseCode {
-    UnknownError = 4000,
-    UnknownOpcode = 4001,
-    DecodeError = 4002,
-    NotAuthenticated = 4003,
-    AuthenticationFailed = 4004,
-    AlreadyAuthenticated = 4005,
-    InvalidSeq = 4007,
-    RateLimited = 4008,
-    SessionTimedOut = 4009,
-    InvalidShard = 4010,
-    ShardingRequired = 4011,
-    InvalidAPIVersion = 4012,
-    InvalidIntents = 4013,
-    DisallowedIntents = 4014,
+    UnknownError,
+    UnknownOpcode,
+    DecodeError,
+    NotAuthenticated,
+    AuthenticationFailed,
+    AlreadyAuthenticated,
+    InvalidSeq,
+    RateLimited,
+    SessionTimedOut,
+    InvalidShard,
+    ShardingRequired,
+    InvalidAPIVersion,
+    InvalidIntents,
+    DisallowedIntents,
+    Other(u16),
 }
 
 impl Display for CloseCode {
@@ -70,6 +70,7 @@ impl std::error::Error for CloseCode {}
 impl From<u16> for CloseCode {
     fn from(v: u16) -> Self {
         match v {
+            4000 => CloseCode::UnknownError,
             4001 => CloseCode::UnknownOpcode,
             4003 => CloseCode::DecodeError,
             4004 => CloseCode::NotAuthenticated,
@@ -83,16 +84,26 @@ impl From<u16> for CloseCode {
             4012 => CloseCode::InvalidAPIVersion,
             4013 => CloseCode::InvalidIntents,
             4014 => CloseCode::DisallowedIntents,
-            _ => CloseCode::UnknownError,
+            v => CloseCode::Other(v),
         }
     }
 }
 
 impl CloseCode {
     /// Returns true if the connection can be recovered after receiving this close code
+    ///
+    /// <https://discord.com/developers/docs/topics/opcodes-and-status-codes#gateway-gateway-close-event-codes>
     pub fn is_recoverable(&self) -> bool {
         match self {
-            CloseCode::AlreadyAuthenticated | CloseCode::SessionTimedOut => true,
+            CloseCode::UnknownError
+            | CloseCode::UnknownOpcode
+            | CloseCode::DecodeError
+            | CloseCode::NotAuthenticated
+            | CloseCode::AlreadyAuthenticated
+            | CloseCode::InvalidSeq
+            | CloseCode::RateLimited
+            | CloseCode::SessionTimedOut => true,
+            CloseCode::Other(code) => *code < 4000, // try to recover if the code was not a 4000 code
             _ => false,
         }
     }

@@ -8,7 +8,7 @@ use http::Request;
 use reqwest::Url;
 use serde::{de::DeserializeOwned, Serialize};
 
-use crate::model::{id::ChannelId, Channel, Guild, Message, User};
+use crate::model::{id::ChannelId, Channel, Message, User};
 
 use super::{gateway::GetGatewayBot, message::CreateMessageParams, CreateDmParams};
 

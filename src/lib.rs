@@ -20,6 +20,9 @@ pub(crate) const LIB_NAME: &str = "discord-api";
 pub mod cache;
 pub mod proto;
 
+#[cfg(feature = "manager")]
+pub mod manager;
+
 pub mod error;
 pub mod model;
 pub mod rest;

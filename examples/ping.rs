@@ -11,10 +11,7 @@ use tokio::{
 };
 use tokio_tungstenite as ws;
 use ws::{
-    tungstenite::{
-        protocol::{frame::coding::CloseCode as WsCloseCode, CloseFrame},
-        Message,
-    },
+    tungstenite::{protocol::CloseFrame, Message},
     MaybeTlsStream, WebSocketStream,
 };
 

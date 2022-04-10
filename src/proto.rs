@@ -1,4 +1,8 @@
 //! Discord Gateway Protocol implementation as a state machine
+//!
+//! The connection itself does not handle any IO. That is up to the application.
+//! Instead the connection gets passed the messages from the sockets, processes them and generates
+//! messsages that the socket has to send back.
 use crate::{
     error::CloseCode,
     model::gateway::{Event, GatewayCommand, GatewayEvent, Identify, Resume},
@@ -20,6 +24,7 @@ pub struct Connection {
     recv_queue: VecDeque<Event>,
     send_queue: VecDeque<GatewayCommand>,
     state: State,
+    socket_closed: bool,
 }
 
 /// State of the gateway connection
@@ -38,6 +43,7 @@ pub enum State {
     /// Replaying missed events
     Replaying,
     /// The connection failed with the close code
+    /// Do not attempt to reconnect
     Failed(CloseCode),
 }
 
@@ -98,6 +104,7 @@ impl Connection {
             send_queue: VecDeque::with_capacity(SEND_QUEUE_SIZE),
             state: State::Closed,
             session_id: String::new(),
+            socket_closed: false,
         }
     }
 
@@ -114,9 +121,10 @@ impl Connection {
     {
         let code = CloseCode::from(code.into());
         log::debug!("recv_close_code: {}", code);
+        self.socket_closed = true;
 
         self.state = if code.is_recoverable() {
-            State::Reconnect
+            State::Resume
         } else {
             State::Failed(code)
         };
@@ -130,6 +138,9 @@ impl Connection {
             self.state()
         );
         log::trace!("gateway event= {:?}", event);
+
+        // we've received an event so the socket can't be closed
+        self.socket_closed = false;
 
         // an invalid session can potentially be resumed
         if let GatewayEvent::InvalidSession(resumable) = event {
@@ -236,12 +247,7 @@ impl Connection {
     /// assert_eq!(None, conn.send_iter().next());
     /// ```
     pub fn send_iter<'a>(&'a mut self) -> impl Iterator<Item = GatewayCommand> + 'a {
-        if self.is_closed() {
-            log::trace!("connection closed, not sending: {:?}", self.send_queue);
-            self.send_queue.clear();
-        } else {
-            log::trace!("sending commands {:?}", self.send_queue);
-        }
+        log::trace!("sending commands {:?}", self.send_queue);
         self.send_queue.drain(..)
     }
 
@@ -268,10 +274,6 @@ impl Connection {
     /// assert_eq!(None, conn.send_single());
     /// ```
     pub fn send_single(&mut self) -> Option<GatewayCommand> {
-        if self.is_closed() {
-            return None;
-        }
-
         let cmd = self.send_queue.pop_front();
         log::trace!("sending command: {:?}", cmd);
         cmd
@@ -292,7 +294,8 @@ impl Connection {
     pub fn should_reconnect(&self) -> bool {
         match self.state {
             State::Resume | State::Reconnect => true,
-            _ => false,
+            State::Failed(_) => false,
+            _ => self.socket_closed,
         }
     }
 
