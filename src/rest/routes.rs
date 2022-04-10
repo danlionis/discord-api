@@ -14,6 +14,12 @@ pub enum Route {
         /// ChannelId
         channel_id: ChannelId,
     },
+    /// Current user
+    CurrentUser,
+    /// Create a new DM channnel with a User
+    CurrentUserChannels,
+    /// Current user guilds
+    CurrentUserGuilds,
     /// Gateway URL
     Gateway,
     /// Gateway URL with additional information for bots
@@ -45,6 +51,15 @@ impl Display for Route {
             }
             Route::GatewayBot => {
                 write!(fmt, "/gateway/bot")
+            }
+            Route::CurrentUserChannels => {
+                write!(fmt, "/users/@me/channels")
+            }
+            Route::CurrentUser => {
+                write!(fmt, "/users/@me")
+            }
+            Route::CurrentUserGuilds => {
+                write!(fmt, "/users/@me/guilds")
             }
         }
     }

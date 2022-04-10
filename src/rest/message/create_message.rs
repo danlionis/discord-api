@@ -7,7 +7,9 @@ use crate::model::{embed::Embed, id::ChannelId, MessageReference};
 
 use crate::rest::Route;
 
-/// https://discord.com/developers/docs/resources/channel#create-message
+/// Params to for the create message endpoint
+///
+/// <https://discord.com/developers/docs/resources/channel#create-message>
 #[derive(Debug, Default, Serialize)]
 #[allow(missing_docs)]
 pub struct CreateMessageParams {
