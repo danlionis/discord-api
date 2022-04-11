@@ -8,11 +8,14 @@ const DISCORD_API_PREFIX: &str = "https://discord.com/api/v9";
 
 /// Enum containing all routes for the discord rest api
 #[derive(Debug)]
+#[allow(missing_docs)]
 pub enum Route {
     /// Channel messages
-    ChannelMessages {
-        /// ChannelId
+    ChannelMessages { channel_id: ChannelId },
+    OwnReaction {
         channel_id: ChannelId,
+        message_id: MessageId,
+        emoji: String,
     },
     /// Current user
     CurrentUser,
@@ -60,6 +63,17 @@ impl Display for Route {
             }
             Route::CurrentUserGuilds => {
                 write!(fmt, "/users/@me/guilds")
+            }
+            Route::OwnReaction {
+                channel_id,
+                message_id,
+                emoji,
+            } => {
+                write!(
+                    fmt,
+                    "/channels/{}/messages/{}/reactions/{}/@me",
+                    channel_id, message_id, emoji
+                )
             }
         }
     }

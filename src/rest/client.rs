@@ -8,7 +8,10 @@ use http::Request;
 use reqwest::Url;
 use serde::{de::DeserializeOwned, Serialize};
 
-use crate::model::{id::ChannelId, Channel, Message, User};
+use crate::model::{
+    id::{ChannelId, MessageId},
+    Channel, Message, User,
+};
 
 use super::{gateway::GetGatewayBot, message::CreateMessageParams, CreateDmParams};
 
@@ -55,6 +58,17 @@ impl Client {
     pub async fn get_current_user(&self) -> reqwest::Result<User> {
         let req = crate::rest::get_current_user();
         self.get(req).await
+    }
+
+    /// Get the current user
+    pub async fn create_reaction(
+        &self,
+        channel_id: ChannelId,
+        message_id: MessageId,
+        emoji: String,
+    ) -> reqwest::Result<User> {
+        let req = crate::rest::create_reaction(channel_id, message_id, emoji);
+        self.post(req).await
     }
 
     // /// Get current user guilds
