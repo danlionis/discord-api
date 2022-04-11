@@ -1,5 +1,7 @@
 //! Managed connections to the discord gateway
 //!
+//! Managed connections handle I/O operations in addition to the gateway protocol.
+//!
 //! # Example
 //!
 //! ```no_run
@@ -8,7 +10,7 @@
 //! let mut manager = discord::manager::connect(token).await?;
 //!
 //! while let Ok(event) = manager.recv().await {
-//!         // handle event
+//!     println!("received event: {}", event.kind());
 //! }
 //! # Ok(())
 //! # }
@@ -16,7 +18,7 @@
 
 use crate::{model::gateway::Event, proto::Connection, rest::client::Client};
 use futures::{sink::SinkExt, stream::StreamExt};
-use std::{error::Error, fmt::Debug, sync::Arc, time::Duration};
+use std::{error::Error, fmt::Debug, ops::Deref, sync::Arc, time::Duration};
 use tokio::{net::TcpStream, time::Interval};
 use tokio_tungstenite::{self as ws, WebSocketStream};
 use ws::{
@@ -24,10 +26,24 @@ use ws::{
     MaybeTlsStream,
 };
 
-/// Connect to the discord gateway
+/// Connect to the discord gateway.
+///
+/// It is expected from the client that it starts heartbeating right after connecting.
+/// The manager sends heartbeats automatically as long as it is awaiting an event via the
+/// [`recv()`] method.
+///
+/// Should too much time pass between two calls of [`recv()`] it could happen
+/// that the gateway will close the connection.
+/// The manager will try to resume the session during the next call to [`recv()`].
+/// If the session timed out in the connection will be reset.
+///
+/// It is recommended to receive events in a loop and spawn a new thread/task for any
+/// event processing so that the manager will not be blocked from sending heartbeats.
 ///
 /// # Example
-/// See module docs
+/// See [module docs][self]
+///
+/// [`recv()`]: Manager::recv
 pub async fn connect<S>(token: S) -> Result<Manager, ws::tungstenite::Error>
 where
     S: Into<String>,
@@ -62,6 +78,35 @@ where
 }
 
 /// Managed connection to the discord gateway
+///
+/// This manager uses the [tokio_tungstenite](https://docs.rs/tokio-tungstenite) crate for
+/// websockets and the included [`Client`](Client) as REST client.
+///
+/// # Example
+/// ```no_run
+/// # use std::{error::Error, sync::Arc};
+/// # use discord::model::gateway::Event;
+/// #[tokio::main]
+/// async fn main() -> Result<(), Box<dyn Error>> {
+///     let mut manager = discord::manager::connect("YOUR_TOKEN").await?;
+///
+///     while let Ok(event) = manager.recv().await {
+///         if let Event::MessageCreate(msg) = event {
+///             let rest = Arc::clone(manager.rest());
+///
+///             // spawn new task to not block recv loop
+///             tokio::spawn(async move {
+///                 // react with 😀
+///                 let _ = rest
+///                     .create_reaction(msg.channel_id, msg.id, "%F0%9F%98%80".to_owned())
+///                     .await;
+///             });
+///         }
+///     }
+///
+///     Ok(())
+/// }
+/// ```
 pub struct Manager {
     conn: Connection,
     socket: WebSocketStream<MaybeTlsStream<TcpStream>>,
@@ -94,7 +139,7 @@ impl Manager {
     pub async fn recv(&mut self) -> Result<Event, Box<dyn Error>> {
         loop {
             if let Some(event) = self.conn.events_ref_mut().pop_front() {
-                log::trace!("sending event: {:?}", event);
+                log::trace!("passing event to receiver: {:?}", event);
                 return Ok(event);
             }
 
@@ -115,8 +160,12 @@ impl Manager {
                         Some(Ok(msg)) => {
                             self.handle_ws_message(msg).await?;
                         }
-                        _ => {
-                            log::info!("an error occured, closing connection and reconnecting");
+                        Some(Err(e)) => {
+                            log::warn!("an error occured, reconnecting... : {}", e);
+                            self.reconnect_socket().await?;
+                        }
+                        None => {
+                            log::warn!("stream closed, reconnecting...");
                             self.reconnect_socket().await?;
                         }
                     }
@@ -147,7 +196,7 @@ impl Manager {
                 self.conn.recv_json(&msg)?;
             }
             msg => {
-                log::info!("ignoring message: {:?}", msg);
+                log::info!("ignoring unexpected message: {:?}", msg);
             }
         }
         Ok(())
@@ -159,5 +208,12 @@ impl Manager {
         let (socket, _) = ws::connect_async(&self.url).await?;
         self.socket = socket;
         Ok(())
+    }
+}
+
+impl Deref for Manager {
+    type Target = Arc<Client>;
+    fn deref(&self) -> &<Self as Deref>::Target {
+        self.rest()
     }
 }

@@ -1,8 +1,63 @@
-//! Discord Gateway Protocol implementation as a state machine
+//! Gateway Protocol
 //!
-//! The connection itself does not handle any IO. That is up to the application.
-//! Instead the connection gets passed the messages from the sockets, processes them and generates
-//! messsages that the socket has to send back.
+//! A protocol implementation that takes received gateway events, handles connection state and generates
+//! commands to be sent back to the gateway.
+//!
+//! The application is responsible for any I/O (e.g. sockets, async runtime)
+//! as well as the event loop
+//!
+//! # Connection
+//! ```no_run
+//! # use discord::proto::Connection;
+//! # let TOKEN = "--your-token--";
+//! let conn = Connection::new(TOKEN);
+//! ```
+//! At this point the [Connection] is still in the `Closed` state.
+//! As soon as the connection receives the correct `Hello` message from the gateway it will
+//! automatically initialize the connection.
+//!
+//! # Handle incoming events
+//! The socket can pass incoming events to the connection with the [`recv()`] method upon which the
+//! connection updates it's state
+//!
+//! ```no_run
+//! # use discord::proto::Connection;
+//! # use discord::model::gateway::GatewayEvent;
+//! # fn recv_from_socket() -> GatewayEvent { unimplemented!() };
+//! # let mut conn = Connection::new("TOKEN");
+//! let event = recv_from_socket();
+//!
+//! conn.recv(event);
+//! ```
+//! If the socket provides the data formatted as a JSON string the [`recv_json()`] method can be used instead.
+//!
+//! # Handle outgoing commands
+//! The connection generates commands to be sent to the gateway with the `send` methods.
+//! - [`send_iter()`] creates an iterator over all commands
+//! - [`send_single()`] creates a single command
+//!
+//! ```no_run
+//! # use discord::proto::Connection;
+//! # use discord::model::gateway::GatewayCommand;
+//! # fn send_to_socket(cmd: GatewayCommand) { unimplemented!() };
+//! # let mut conn = Connection::new("TOKEN");
+//! for cmd in conn.send_iter() {
+//!     send_to_socket(cmd);
+//! }
+//!
+//! while let Some(cmd) = conn.send_single() {
+//!     send_to_socket(cmd);
+//! }
+//! ```
+//!
+//! Both `send` methods are also available as `_json` variants to directly generate JSON serialized
+//! commands
+//!
+//!
+//! [`recv()`]: Connection::recv
+//! [`recv_json()`]: Connection::recv_json
+//! [`send_iter()`]: Connection::send_iter
+//! [`send_single()`]: Connection::send_single
 use crate::{
     error::CloseCode,
     model::gateway::{Event, GatewayCommand, GatewayEvent, Identify, Resume},
@@ -10,8 +65,8 @@ use crate::{
 use serde_json;
 use std::collections::VecDeque;
 
-const RECV_QUEUE_SIZE: usize = 4;
-const SEND_QUEUE_SIZE: usize = 4;
+const RECV_QUEUE_SIZE: usize = 1;
+const SEND_QUEUE_SIZE: usize = 1;
 
 /// Discord gateway connection handler to
 #[derive(Debug)]
@@ -28,6 +83,9 @@ pub struct Connection {
 }
 
 /// State of the gateway connection
+///
+/// This state is only used this way in this library and does not reflect the state of the gateway
+/// connection itself
 #[derive(Clone, Debug)]
 pub enum State {
     /// No connection established

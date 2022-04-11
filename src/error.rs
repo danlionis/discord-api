@@ -1,5 +1,7 @@
 //! Error types
 
+use std::fmt::Display;
+
 /// Discord Error Types
 #[derive(Debug)]
 pub enum Error {
@@ -18,8 +20,6 @@ pub enum Error {
 // pub enum DiscordError {
 //     SendError,
 // }
-
-use std::fmt::Display;
 
 impl From<serde_json::Error> for Error {
     fn from(err: serde_json::Error) -> Self {
