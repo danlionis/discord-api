@@ -114,19 +114,14 @@ impl Connection {
         1000
     }
 
-    /// Reconnect
-    pub fn reconnect(&mut self) {
-        self.state = State::Reconnect;
-    }
-
-    /// Resume
-    pub fn resume(&mut self) {
-        self.state = State::Resume;
-    }
-
     /// Add a command to the send queue
     pub fn enqueue_command(&mut self, cmd: GatewayCommand) {
         self.send_queue.push_back(cmd);
+    }
+
+    /// Get the oldest event received from the gateway
+    pub fn event(&mut self) -> Option<Event> {
+        self.recv_queue.pop_front()
     }
 
     /// Create an iterator of all the events received from the gateway
@@ -238,7 +233,8 @@ impl Connection {
             self.heartbeat_interval = hello.heartbeat_interval;
 
             self.state = match self.state {
-                State::Resume => {
+                // if the connection was ready we try to resume first
+                State::Resume | State::Ready => {
                     self.send_queue
                         .push_back(GatewayCommand::Resume(Resume::new(
                             self.token.clone(),

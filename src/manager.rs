@@ -176,10 +176,11 @@ impl Manager {
             for s in self.conn.send_iter_json() {
                 log::debug!("sending: {}", s);
                 self.socket
-                    .send(ws::tungstenite::Message::Text(s))
+                    .feed(Message::Text(s))
                     .await
                     .expect("could not send");
             }
+            self.socket.flush().await?;
         }
     }
 
