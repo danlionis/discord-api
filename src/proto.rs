@@ -245,8 +245,9 @@ impl Connection {
                 }
                 // client got reconnected
                 _ => {
-                    self.send_queue
-                        .push_back(GatewayCommand::Identify(Identify::new(&self.token)));
+                    self.send_queue.push_back(GatewayCommand::Identify(
+                        Identify::builder(&self.token).build(),
+                    ));
                     State::Identify
                 }
             }

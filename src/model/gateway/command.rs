@@ -38,49 +38,103 @@ pub enum GatewayCommand {
 #[derive(Debug, Serialize, PartialEq, Eq)]
 pub struct Identify {
     /// authentication token
-    pub token: String,
+    token: String,
 
     /// connection properties
-    pub properties: ConnectionProperties,
+    properties: ConnectionProperties,
 
     // /// whether this connection supports compression of packets (TODO: implement compression)
     // compress: Option<bool>,
     /// value between 50 and 250, total number of members where the gateway will stop sending
     /// offline members in the guild member list
-    pub large_threshold: Option<i32>,
+    large_threshold: Option<i32>,
 
-    /// guild sharding
-    pub shard: (i32, i32),
+    /// guild shard and total shards
+    shard: (i32, i32),
 
     /// initial presence information
-    pub presence: Option<UpdateStatus>,
+    presence: Option<UpdateStatus>,
 
     /// gateway intens to recieve
-    pub intents: Intents,
+    intents: Intents,
 }
 
 impl Identify {
     /// Create a new Identify command
-    pub fn new(token: &str) -> Self {
-        let properties = ConnectionProperties {
-            os: "linux".to_owned(),
-            device: crate::LIB_NAME.to_owned(),
-            browser: crate::LIB_NAME.to_owned(),
-        };
+    pub fn builder(token: &str) -> IdentifyBuilder {
+        IdentifyBuilder::new(token.to_string())
+    }
+}
 
-        Self {
-            token: token.to_owned(),
-            properties,
+/// Builder for [`Identify`][Identify]
+#[derive(Debug)]
+pub struct IdentifyBuilder {
+    token: String,
+    properties: ConnectionProperties,
+    // compress: Option<bool>,
+    large_threshold: Option<i32>,
+    shard: (i32, i32),
+    presence: Option<UpdateStatus>,
+    intents: Intents,
+}
+
+impl IdentifyBuilder {
+    fn new(token: String) -> Self {
+        IdentifyBuilder {
+            token,
+            properties: Default::default(),
             large_threshold: None,
             shard: (0, 1),
             presence: None,
             intents: intents::ALL,
         }
     }
+
+    /// Set connection properties
+    pub fn properties(mut self, properties: ConnectionProperties) -> Self {
+        self.properties = properties;
+        self
+    }
+
+    /// Set large threshold
+    pub fn large_threshold(mut self, large_threshold: i32) -> Self {
+        self.large_threshold = Some(large_threshold);
+        self
+    }
+
+    /// Set shard
+    pub fn shard(mut self, shard: (i32, i32)) -> Self {
+        self.shard = shard;
+        self
+    }
+
+    /// Set presence
+    pub fn presence(mut self, presence: UpdateStatus) -> Self {
+        self.presence = Some(presence);
+        self
+    }
+
+    /// Set presence
+    pub fn intents(mut self, intents: Intents) -> Self {
+        self.intents = intents;
+        self
+    }
+
+    /// Consume builder and create [`Identify`][Identify]
+    pub fn build(self) -> Identify {
+        Identify {
+            token: self.token,
+            properties: self.properties,
+            large_threshold: self.large_threshold,
+            shard: self.shard,
+            presence: self.presence,
+            intents: self.intents,
+        }
+    }
 }
 
 /// [Reference](https://discord.com/developers/docs/topics/gateway#identify-identify-connection-properties)
-#[derive(Debug, Serialize, PartialEq, Eq)]
+#[derive(Debug, Serialize, PartialEq, Eq, Default)]
 pub struct ConnectionProperties {
     /// your operating system
     #[serde(rename = "$os")]
