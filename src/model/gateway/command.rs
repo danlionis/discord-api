@@ -38,25 +38,25 @@ pub enum GatewayCommand {
 #[derive(Debug, Serialize, PartialEq, Eq)]
 pub struct Identify {
     /// authentication token
-    token: String,
+    pub(crate) token: String,
 
     /// connection properties
-    properties: ConnectionProperties,
+    pub(crate) properties: ConnectionProperties,
 
     // /// whether this connection supports compression of packets (TODO: implement compression)
     // compress: Option<bool>,
     /// value between 50 and 250, total number of members where the gateway will stop sending
     /// offline members in the guild member list
-    large_threshold: Option<i32>,
+    pub(crate) large_threshold: Option<i32>,
 
     /// guild shard and total shards
-    shard: (i32, i32),
+    pub(crate) shard: (i32, i32),
 
     /// initial presence information
-    presence: Option<UpdateStatus>,
+    pub(crate) presence: Option<UpdateStatus>,
 
     /// gateway intens to recieve
-    intents: Intents,
+    pub(crate) intents: Intents,
 }
 
 impl Identify {

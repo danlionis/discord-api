@@ -85,7 +85,7 @@ pub struct Connection {
 ///
 /// This state is only used this way in this library and does not reflect the state of the gateway
 /// connection itself
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum State {
     /// No connection established
     Closed,
@@ -391,5 +391,145 @@ impl Connection {
             State::Failed(code) => Some(code),
             _ => None,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::model::{
+        gateway::{Hello, Ready},
+        User,
+    };
+
+    use super::*;
+
+    fn create_default_user() -> User {
+        User {
+            id: 0.into(),
+            username: "username".into(),
+            discriminator: "0000".into(),
+            avatar: None,
+            bot: true,
+            system: false,
+            mfa_enabled: false,
+            locale: None,
+            verified: false,
+            email: None,
+            premium_type: 0,
+            public_flags: 0,
+            flags: 0,
+        }
+    }
+
+    #[test]
+    fn test_connect() {
+        let token = "TOKEN";
+        let mut conn = Connection::new(token);
+        assert_eq!(State::Closed, *conn.state());
+
+        let hello = GatewayEvent::Hello(Hello {
+            heartbeat_interval: 10,
+        });
+        conn.recv(hello);
+        assert_eq!(State::Identify, *conn.state());
+
+        let identify = conn.send().unwrap();
+        let identify = if let GatewayCommand::Identify(identify) = identify {
+            identify
+        } else {
+            panic!("excpeted GatewayCommand::Identify, got {:?}", identify);
+        };
+
+        assert_eq!(token, &identify.token);
+        assert_eq!((0, 1), identify.shard);
+
+        let ready = GatewayEvent::Dispatch(
+            0,
+            Event::Ready(Ready {
+                version: 0,
+                user: create_default_user(),
+                session_id: "session_id".into(),
+                shard: Some((0, 1)),
+            }),
+        );
+
+        conn.recv(ready);
+        assert_eq!(State::Ready, *conn.state());
+    }
+
+    #[test]
+    fn test_resume() {
+        let token = "TOKEN";
+        let mut conn = Connection::new(token);
+        let session_id = "session_id".to_string();
+        assert_eq!(State::Closed, *conn.state());
+
+        let hello = GatewayEvent::Hello(Hello {
+            heartbeat_interval: 10,
+        });
+        conn.recv(hello);
+        assert_eq!(State::Identify, *conn.state());
+        assert_eq!(10, conn.heartbeat_interval());
+
+        let _identify = conn.send().unwrap();
+
+        let ready = GatewayEvent::Dispatch(
+            0,
+            Event::Ready(Ready {
+                version: 0,
+                user: create_default_user(),
+                session_id: session_id.clone(),
+                shard: Some((0, 1)),
+            }),
+        );
+        conn.recv(ready);
+        assert_eq!(State::Ready, *conn.state());
+
+        // simulate socket reconnect
+        let hello = GatewayEvent::Hello(Hello {
+            heartbeat_interval: 15,
+        });
+        conn.recv(hello);
+        assert_eq!(State::Replaying, *conn.state());
+        assert_eq!(15, conn.heartbeat_interval());
+
+        conn.recv(GatewayEvent::Dispatch(
+            0,
+            Event::Ready(Ready {
+                version: 0,
+                user: create_default_user(),
+                session_id: "session_id".into(),
+                shard: Some((0, 1)),
+            }),
+        ));
+        assert_eq!(State::Ready, *conn.state());
+    }
+
+    #[test]
+    fn test_invalid_session() {
+        let mut conn = Connection::new("TOKEN");
+        assert_eq!(State::Closed, *conn.state());
+
+        conn.recv(GatewayEvent::InvalidSession(true));
+        assert_eq!(State::Resume, *conn.state());
+        assert!(conn.should_reconnect());
+
+        conn.recv(GatewayEvent::InvalidSession(false));
+        assert_eq!(State::Reconnect, *conn.state());
+        assert!(conn.should_reconnect());
+
+        conn.recv(GatewayEvent::Reconnect);
+        assert_eq!(State::Resume, *conn.state());
+        assert!(conn.should_reconnect());
+    }
+
+    #[test]
+    fn test_heartbeat_request() {
+        let mut conn = Connection::new("TOKEN");
+        assert_eq!(State::Closed, *conn.state());
+
+        conn.recv(GatewayEvent::Heartbeat(0));
+
+        assert_eq!(Some(GatewayCommand::Heartbeat(0)), conn.send());
     }
 }
