@@ -7,6 +7,7 @@
     rustdoc::broken_intra_doc_links
 )]
 
+#[allow(dead_code)]
 pub(crate) const LIB_NAME: &str = "discord-api";
 
 #[cfg(feature = "cache")]

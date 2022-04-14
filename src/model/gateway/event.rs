@@ -44,6 +44,7 @@ impl GatewayEvent {
 
 impl GatewayEvent {
     /// Deserialize a GatewayEvent from a json string received from the gateway
+    #[cfg(feature = "json")]
     pub fn from_json_str(json_str: &str) -> Result<GatewayEvent, serde_json::Error> {
         let seed = GatewayEventSeed::from_json_str(&json_str);
         let mut deserializer = serde_json::Deserializer::from_str(&json_str);
@@ -61,6 +62,7 @@ pub(crate) struct GatewayEventSeed<'a> {
     pub event_kind: Option<&'a str>,
 }
 
+#[cfg(feature = "json")]
 impl<'a> GatewayEventSeed<'a> {
     /// Create a new `GatewayEventSeed` with the values already known
     pub(crate) fn new(op: Opcode, seq: Option<u64>, event_kind: Option<&'a str>) -> Self {

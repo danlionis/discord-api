@@ -14,6 +14,7 @@ pub enum Error {
     // /// Api Error
     // ApiError(ApiError),
     /// Serde parse error
+    #[cfg(feature = "json")]
     ParseError(serde_json::Error),
     /// Gateway Error
     GatewayClosed(Option<CloseCode>),
@@ -24,9 +25,12 @@ pub enum Error {
 impl Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            #[cfg(feature = "manager")]
             Error::WebSocketError(err) => Display::fmt(err, f),
+            #[cfg(feature = "rest")]
             Error::ReqwestError(err) => Display::fmt(err, f),
             // Error::ApiError(err) => Display::fmt(err, f),
+            #[cfg(feature = "json")]
             Error::ParseError(err) => Display::fmt(err, f),
             Error::GatewayClosed(err) => write!(f, "GatewayClosed({:?}", err),
             Error::Custom(err) => f.write_str(&err),
@@ -36,6 +40,7 @@ impl Display for Error {
 
 impl std::error::Error for Error {}
 
+#[cfg(feature = "json")]
 impl From<serde_json::Error> for Error {
     fn from(err: serde_json::Error) -> Self {
         Self::ParseError(err)
@@ -90,6 +95,7 @@ pub enum CloseCode {
 
 impl Display for CloseCode {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        // TODO: implement proper display
         write!(fmt, "{:?}", self)
     }
 }

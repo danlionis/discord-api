@@ -10,8 +10,8 @@ version = "0.1.0"
 log = "0.4"
 url = "2.2"
 http = "0.2"
-serde_json = "1.0"
 serde_repr = "0.1"
+serde_json = { version = "1.0", optional = true }
 serde = { version = "1.0", features = ["derive"] }
 chrono = { version = "0.4", features = ["serde"] }
 lru = { version = "0.7.0", optional = true }
@@ -25,10 +25,11 @@ futures = { version = "0.3", optional = true }
 env_logger = "0.9"
 serde_test = "1.0"
 
-
 [features]
-manager = ["rest", "tokio", "tokio-tungstenite", "futures"]
-full = ["cache", "reqwest"]
+default = ["json"]
+manager = ["rest", "tokio", "tokio-tungstenite", "futures", "json"]
+full = ["cache", "reqwest", "json", "manager"]
+json = ["serde_json"]
 cache = ["dashmap", "lru"]
 rest = ["reqwest"]
 
@@ -37,3 +38,12 @@ all-features = true
 
 [[example]]
 name = "ping"
+required-features = ["manager"]
+
+[[example]]
+name = "manager_ping"
+required-features = ["manager"]
+
+[[example]]
+name = "rest"
+required-features = ["rest"]

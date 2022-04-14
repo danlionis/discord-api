@@ -34,7 +34,7 @@
 //! # Handle outgoing commands
 //! The connection generates commands to be sent to the gateway with the `send` methods.
 //! - [`send_iter()`] creates an iterator over all commands
-//! - [`send_single()`] creates a single command
+//! - [`send()`] creates a single command
 //!
 //! ```no_run
 //! # use discord::proto::Connection;
@@ -45,7 +45,7 @@
 //!     send_to_socket(cmd);
 //! }
 //!
-//! while let Some(cmd) = conn.send_single() {
+//! while let Some(cmd) = conn.send() {
 //!     send_to_socket(cmd);
 //! }
 //! ```
@@ -57,12 +57,11 @@
 //! [`recv()`]: Connection::recv
 //! [`recv_json()`]: Connection::recv_json
 //! [`send_iter()`]: Connection::send_iter
-//! [`send_single()`]: Connection::send_single
+//! [`send()`]: Connection::send
 use crate::{
     error::CloseCode,
     model::gateway::{Event, GatewayCommand, GatewayEvent, Identify, Resume},
 };
-use serde_json;
 use std::collections::VecDeque;
 
 const RECV_QUEUE_SIZE: usize = 1;
@@ -106,14 +105,6 @@ pub enum State {
 }
 
 impl Connection {
-    /// Close connection
-    ///
-    /// Remember to close the connection with a close code of 1000 or 1001
-    pub fn close(&mut self) -> u16 {
-        *self = Connection::new(self.token.clone());
-        1000
-    }
-
     /// Add a command to the send queue
     pub fn enqueue_command(&mut self, cmd: GatewayCommand) {
         self.send_queue.push_back(cmd);
@@ -162,12 +153,35 @@ impl Connection {
     }
 
     /// Queue a heartbeat packet to be sent to the gateway
+    ///
+    /// # Example
+    /// ```
+    /// # use discord::{proto::Connection, model::gateway::GatewayCommand};
+    /// # let mut conn = Connection::new("");
+    /// conn.queue_heartbeat();
+    /// assert_eq!(Some(GatewayCommand::Heartbeat(0)), conn.send());
+    /// ```
     pub fn queue_heartbeat(&mut self) {
         self.send_queue
             .push_back(GatewayCommand::Heartbeat(self.seq))
     }
 
     /// Process a close code received from the gateway websocket connection
+    ///
+    /// # Example
+    /// ```
+    /// # use discord::{proto::Connection, error::CloseCode};
+    /// # let mut conn = Connection::new("");
+    /// // connection closed normally
+    /// conn.recv_close_code(1000u16);
+    /// assert!(conn.should_reconnect());
+    /// assert_eq!(None, conn.failed());
+    ///
+    /// // authentication failed code
+    /// conn.recv_close_code(4005u16);
+    /// assert!(!conn.should_reconnect());
+    /// assert_eq!(Some(CloseCode::AuthenticationFailed), conn.failed());
+    /// ```
     pub fn recv_close_code<T>(&mut self, code: T)
     where
         T: Into<u16>,
@@ -281,6 +295,7 @@ impl Connection {
     }
 
     /// Processes a discord event received from the gateway
+    #[cfg(feature = "json")]
     pub fn recv_json(&mut self, event: &str) -> Result<(), serde_json::Error> {
         let event = GatewayEvent::from_json_str(event)?;
 
@@ -292,14 +307,14 @@ impl Connection {
     /// Create an iterator of all the commands to be sent to the gateway
     ///
     /// # Example
-    /// ```
+    /// ```no_run
     /// # use discord::proto::Connection;
     /// # use discord::model::gateway::GatewayCommand;
+    /// # fn send_to_socket(cmd: GatewayCommand) { unimplemented!() };
     /// # let mut conn = Connection::new("token");
-    /// conn.queue_heartbeat();
-    ///
-    /// assert_eq!(Some(GatewayCommand::Heartbeat(0)), conn.send_iter().next());
-    /// assert_eq!(None, conn.send_iter().next());
+    /// for cmd in conn.send_iter() {
+    ///     send_to_socket(cmd);
+    /// }
     /// ```
     pub fn send_iter<'a>(&'a mut self) -> impl Iterator<Item = GatewayCommand> + 'a {
         log::trace!("sending commands {:?}", self.send_queue);
@@ -308,41 +323,44 @@ impl Connection {
 
     /// Create an iterator of all the commands to be sent to the gateway
     ///
-    /// The commands are already in json format
+    /// The commands will already be serialized in JSON.
+    #[cfg(feature = "json")]
     pub fn send_iter_json<'a>(&'a mut self) -> impl Iterator<Item = String> + 'a {
         self.send_iter()
             .map(|cmd| serde_json::to_string(&cmd).unwrap())
     }
 
-    /// Creates a single discord command to be sent to the gateway
+    /// Creates a single discord command to be sent to the gateway.
     ///
-    /// `None` if nothing to send
+    /// Returns `None` if there is nothing to send.
     ///
     /// # Example
     /// ```
     /// # use discord::proto::Connection;
     /// # use discord::model::gateway::GatewayCommand;
+    /// # fn send_to_socket(cmd: GatewayCommand) { unimplemented!() };
     /// # let mut conn = Connection::new("token");
-    /// conn.queue_heartbeat();
-    ///
-    /// assert_eq!(Some(GatewayCommand::Heartbeat(0)), conn.send_single());
-    /// assert_eq!(None, conn.send_single());
+    /// while let Some(cmd) = conn.send() {
+    ///     send_to_socket(cmd);
+    /// }
     /// ```
-    pub fn send_single(&mut self) -> Option<GatewayCommand> {
+    pub fn send(&mut self) -> Option<GatewayCommand> {
         let cmd = self.send_queue.pop_front();
         log::trace!("sending command: {:?}", cmd);
         cmd
     }
 
-    /// Creates a single discord command to be sent to the gateway
+    /// Creates a single discord command to be sent to the gateway.
+    ///
+    /// The command will already be serialized as JSON.
     ///
     /// # Example
-    /// see [send_single]
+    /// see [send]
     ///
-    /// [send_single]: Connection::send_single
-    pub fn send_single_json(&mut self) -> Option<String> {
-        self.send_single()
-            .map(|cmd| serde_json::to_string(&cmd).unwrap())
+    /// [send]: Connection::send
+    #[cfg(feature = "json")]
+    pub fn send_json(&mut self) -> Option<String> {
+        self.send().map(|cmd| serde_json::to_string(&cmd).unwrap())
     }
 
     /// Returns true if the underlying gateway connection has to be reconnected
