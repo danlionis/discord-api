@@ -1,26 +1,21 @@
-//! Low Level Discord Library
-
-// extern crate chrono;
-// extern crate hyper;
-// extern crate hyper_tls;
-// extern crate log;
-// extern crate serde;
-// extern crate serde_json;
+//! Low level Discord protocol library
 
 #![warn(
     missing_docs,
     rust_2018_idioms,
     missing_debug_implementations,
-    broken_intra_doc_links
+    rustdoc::broken_intra_doc_links
 )]
 
-// #[cfg(feature = "cache")]
-pub mod cache;
-// pub mod proto;
+pub(crate) const LIB_NAME: &str = "discord-api";
 
+#[cfg(feature = "cache")]
+pub mod cache;
 pub mod error;
-pub mod gateway;
+#[cfg(feature = "manager")]
+pub mod manager;
 pub mod model;
+pub mod proto;
 pub mod rest;
 pub mod util;
 

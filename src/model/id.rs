@@ -62,6 +62,13 @@ macro_rules! impl_snowflake {
                 Ok(Self(Snowflake::from_str(s)?))
             }
         }
+
+        impl std::fmt::Display for $name {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                self.0.fmt(f)
+            }
+        }
+
         )*
     };
 }

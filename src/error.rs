@@ -1,29 +1,40 @@
 //! Error types
 
-use std::convert::From;
-use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode as WsCloseCode;
+use std::fmt::Display;
 
+/// Discord Error Types
 #[derive(Debug)]
 pub enum Error {
-    DiscordError(DiscordError),
-    RequestError(hyper::Error),
-    ApiError(ApiError),
+    /// Tungstenite error
+    #[cfg(feature = "manager")]
+    WebSocketError(tokio_tungstenite::tungstenite::Error),
+    /// Reqwest error
+    #[cfg(feature = "rest")]
+    ReqwestError(reqwest::Error),
+    // /// Api Error
+    // ApiError(ApiError),
+    /// Serde parse error
     ParseError(serde_json::Error),
-    WebsocketError(tokio_tungstenite::tungstenite::Error),
+    /// Gateway Error
     GatewayClosed(Option<CloseCode>),
+    /// Custom Error
     Custom(String),
 }
 
-#[derive(Debug)]
-pub enum DiscordError {
-    SendError,
-}
-
-impl From<tokio_tungstenite::tungstenite::Error> for Error {
-    fn from(err: tokio_tungstenite::tungstenite::Error) -> Self {
-        Self::WebsocketError(err)
+impl Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Error::WebSocketError(err) => Display::fmt(err, f),
+            Error::ReqwestError(err) => Display::fmt(err, f),
+            // Error::ApiError(err) => Display::fmt(err, f),
+            Error::ParseError(err) => Display::fmt(err, f),
+            Error::GatewayClosed(err) => write!(f, "GatewayClosed({:?}", err),
+            Error::Custom(err) => f.write_str(&err),
+        }
     }
 }
+
+impl std::error::Error for Error {}
 
 impl From<serde_json::Error> for Error {
     fn from(err: serde_json::Error) -> Self {
@@ -31,17 +42,11 @@ impl From<serde_json::Error> for Error {
     }
 }
 
-impl From<hyper::Error> for Error {
-    fn from(err: hyper::Error) -> Self {
-        Self::RequestError(err)
-    }
-}
-
-impl From<ApiError> for Error {
-    fn from(err: ApiError) -> Self {
-        Self::ApiError(err)
-    }
-}
+// impl From<ApiError> for Error {
+//     fn from(err: ApiError) -> Self {
+//         Self::ApiError(err)
+//     }
+// }
 
 impl From<CloseCode> for Error {
     fn from(code: CloseCode) -> Self {
@@ -49,29 +54,52 @@ impl From<CloseCode> for Error {
     }
 }
 
+#[cfg(feature = "manager")]
+impl From<tokio_tungstenite::tungstenite::Error> for Error {
+    fn from(err: tokio_tungstenite::tungstenite::Error) -> Self {
+        Self::WebSocketError(err)
+    }
+}
+
+#[cfg(feature = "rest")]
+impl From<reqwest::Error> for Error {
+    fn from(err: reqwest::Error) -> Self {
+        Self::ReqwestError(err)
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
-#[repr(u16)]
 #[allow(missing_docs)]
 pub enum CloseCode {
-    UnknownError = 4000,
-    UnknownOpcode = 4001,
-    DecodeError = 4002,
-    NotAuthenticated = 4003,
-    AuthenticationFailed = 4004,
-    AlreadyAuthenticated = 4005,
-    InvalidSeq = 4007,
-    RateLimited = 4008,
-    SessionTimedOut = 4009,
-    InvalidShard = 4010,
-    ShardingRequired = 4011,
-    InvalidAPIVersion = 4012,
-    InvalidIntents = 4013,
-    DisallowedIntents = 4014,
+    UnknownError,
+    UnknownOpcode,
+    DecodeError,
+    NotAuthenticated,
+    AuthenticationFailed,
+    AlreadyAuthenticated,
+    InvalidSeq,
+    RateLimited,
+    SessionTimedOut,
+    InvalidShard,
+    ShardingRequired,
+    InvalidAPIVersion,
+    InvalidIntents,
+    DisallowedIntents,
+    Other(u16),
 }
+
+impl Display for CloseCode {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        write!(fmt, "{:?}", self)
+    }
+}
+
+impl std::error::Error for CloseCode {}
 
 impl From<u16> for CloseCode {
     fn from(v: u16) -> Self {
         match v {
+            4000 => CloseCode::UnknownError,
             4001 => CloseCode::UnknownOpcode,
             4003 => CloseCode::DecodeError,
             4004 => CloseCode::NotAuthenticated,
@@ -85,15 +113,28 @@ impl From<u16> for CloseCode {
             4012 => CloseCode::InvalidAPIVersion,
             4013 => CloseCode::InvalidIntents,
             4014 => CloseCode::DisallowedIntents,
-            _ => CloseCode::UnknownError,
+            v => CloseCode::Other(v),
         }
     }
 }
 
-impl From<WsCloseCode> for CloseCode {
-    fn from(v: WsCloseCode) -> Self {
-        let v: u16 = v.into();
-        CloseCode::from(v)
+impl CloseCode {
+    /// Returns true if the connection can be recovered after receiving this close code
+    ///
+    /// <https://discord.com/developers/docs/topics/opcodes-and-status-codes#gateway-gateway-close-event-codes>
+    pub fn is_recoverable(&self) -> bool {
+        match self {
+            CloseCode::UnknownError
+            | CloseCode::UnknownOpcode
+            | CloseCode::DecodeError
+            | CloseCode::NotAuthenticated
+            | CloseCode::AlreadyAuthenticated
+            | CloseCode::InvalidSeq
+            | CloseCode::RateLimited
+            | CloseCode::SessionTimedOut => true,
+            CloseCode::Other(code) => *code < 4000, // try to recover if the code was not a 4000 code
+            _ => false,
+        }
     }
 }
 

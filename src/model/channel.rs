@@ -1,3 +1,4 @@
+//! Channel types
 use crate::model::{
     id::{ApplicationId, ChannelId, GuildId, MessageId, UserId},
     PermissonOverwrite, User,
@@ -79,6 +80,9 @@ impl AsRef<ChannelId> for Channel {
 #[derive(Debug)]
 pub struct InvalidChannelType;
 
+/// Channel type
+///
+/// <https://discord.com/developers/docs/resources/channel#channel-object-channel-types>
 #[derive(Debug, Eq, PartialEq, Clone, Copy, Hash)]
 #[repr(u8)]
 #[allow(missing_docs)]
@@ -89,7 +93,14 @@ pub enum ChannelType {
     GroupDM = 3,
     GuildCategory = 4,
     GuildNews = 5,
+    #[deprecated]
     GuildStore = 6,
+    GuildNewsThread = 10,
+    GuildPublicThread = 11,
+    GuildPrivateThread = 12,
+    GuildStageVoice = 13,
+    GuildDirectory = 14,
+    GuildForum = 15,
 }
 
 impl std::convert::From<u8> for ChannelType {
@@ -101,7 +112,12 @@ impl std::convert::From<u8> for ChannelType {
             3 => ChannelType::GroupDM,
             4 => ChannelType::GuildCategory,
             5 => ChannelType::GuildNews,
-            6 => ChannelType::GuildStore,
+            10 => ChannelType::GuildNewsThread,
+            11 => ChannelType::GuildPublicThread,
+            12 => ChannelType::GuildPrivateThread,
+            13 => ChannelType::GuildStageVoice,
+            14 => ChannelType::GuildDirectory,
+            15 => ChannelType::GuildForum,
             _ => panic!("unknown channel type"),
         }
     }
@@ -156,7 +172,6 @@ macro_rules! impl_concrete_channel {
 
 impl_concrete_channel!(GuildTextChannel, ChannelType::GuildText);
 impl_concrete_channel!(GuildVoiceChannel, ChannelType::GuildVoice);
-impl_concrete_channel!(GuildStoreChannel, ChannelType::GuildStore);
 impl_concrete_channel!(GuildCategoryChannel, ChannelType::GuildCategory);
 impl_concrete_channel!(GuildNewsChannel, ChannelType::GuildNews);
 impl_concrete_channel!(DMChannel, ChannelType::DM);

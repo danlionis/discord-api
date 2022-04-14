@@ -1,3 +1,4 @@
+//! Emoji types
 use crate::model::id::{EmojiId, RoleId};
 use crate::model::User;
 use serde::{Deserialize, Serialize};

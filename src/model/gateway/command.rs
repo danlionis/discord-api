@@ -13,7 +13,7 @@ use serde::{ser::SerializeStruct, Serialize};
 /// Commands used to make requests to the gateway
 ///
 /// [Reference](https://discord.com/developers/docs/topics/gateway#commands-and-events-gateway-commands)
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum GatewayCommand {
     /// triggers the initial handshake with the gateway
     Identify(Identify),
@@ -35,7 +35,7 @@ pub enum GatewayCommand {
 }
 
 /// Triggers the initial handshake with the gateway
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, PartialEq, Eq)]
 pub struct Identify {
     /// authentication token
     pub token: String,
@@ -60,11 +60,12 @@ pub struct Identify {
 }
 
 impl Identify {
-    pub(crate) fn new(token: &str) -> Self {
+    /// Create a new Identify command
+    pub fn new(token: &str) -> Self {
         let properties = ConnectionProperties {
             os: "linux".to_owned(),
-            device: "donbot".to_owned(),
-            browser: "donbot".to_owned(),
+            device: crate::LIB_NAME.to_owned(),
+            browser: crate::LIB_NAME.to_owned(),
         };
 
         Self {
@@ -79,7 +80,7 @@ impl Identify {
 }
 
 /// [Reference](https://discord.com/developers/docs/topics/gateway#identify-identify-connection-properties)
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, PartialEq, Eq)]
 pub struct ConnectionProperties {
     /// your operating system
     #[serde(rename = "$os")]
@@ -97,7 +98,7 @@ pub struct ConnectionProperties {
 /// Sent by the client to indicate a presence or status update
 ///
 /// [Reference](https://discord.com/developers/docs/topics/gateway#update-status)
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, PartialEq, Eq)]
 pub struct UpdateStatus {
     /// unix time (in milliseconds) of when the client went idle, or `None` if the client is not
     /// idle
@@ -117,7 +118,7 @@ pub struct UpdateStatus {
 /// Used to replay missed events when a disconnected client resumes
 ///
 /// [Reference](https://discord.com/developers/docs/topics/gateway#resume)
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, PartialEq, Eq)]
 pub struct Resume {
     /// session token
     pub token: String,
@@ -128,6 +129,7 @@ pub struct Resume {
 }
 
 impl Resume {
+    /// Create a new resume command
     pub fn new(token: String, session_id: String, seq: u64) -> Self {
         Resume {
             token,
@@ -140,7 +142,7 @@ impl Resume {
 /// Used to request all members for a guild or a list of guilds.
 ///
 /// [Reference](https://discord.com/developers/docs/topics/gateway#request-guild-members)
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, PartialEq, Eq)]
 pub struct RequestGuildMembers {
     /// id of the guild to get members for
     pub guild_id: GuildId,
@@ -163,7 +165,7 @@ pub struct RequestGuildMembers {
 }
 
 /// Sent when a client wants to join, move, or disconnect from a voice channel
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, PartialEq, Eq)]
 pub struct UpdateVoiceState {
     /// id of the guild
     pub guild_id: GuildId,

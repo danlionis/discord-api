@@ -1,10 +1,13 @@
+//! Activity types
 use crate::model::id::ApplicationId;
 use crate::model::Emoji;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr as DeserializeRepr, Serialize_repr as SerializeRepr};
 
+/// Timestamp
 pub type Timestamp = u64;
 
+/// User Activity
 #[derive(Debug, Serialize, Deserialize, Hash, Eq, PartialEq, Clone)]
 pub struct Activity {
     /// the activity's name

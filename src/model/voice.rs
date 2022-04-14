@@ -3,6 +3,7 @@ use crate::model::GuildMember;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Hash, Eq, PartialEq, Debug, Deserialize, Serialize)]
+/// VoiceState
 pub struct VoiceState {
     /// the guild id this voice state is for
     pub guild_id: Option<GuildId>,

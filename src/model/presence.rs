@@ -3,11 +3,13 @@ use crate::model::Activity;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Hash, Eq, PartialEq, Debug, Serialize, Deserialize)]
+#[allow(missing_docs)]
 pub struct PartialUser {
     pub id: UserId,
 }
 
 #[derive(Clone, Hash, Eq, PartialEq, Debug, Serialize, Deserialize)]
+#[allow(missing_docs)]
 pub struct ClientStatus {
     pub desktop: Option<String>,
     pub mobile: Option<String>,
@@ -15,6 +17,7 @@ pub struct ClientStatus {
 }
 
 #[derive(Clone, Hash, Eq, PartialEq, Debug, Serialize, Deserialize)]
+#[allow(missing_docs)]
 pub struct Presence {
     pub user: PartialUser,
     pub guild_id: Option<GuildId>,
