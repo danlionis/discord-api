@@ -5,9 +5,14 @@ use std::fmt::Display;
 /// Discord Error Types
 #[derive(Debug)]
 pub enum Error {
-    // DiscordError(DiscordError),
-    /// Api Error
-    ApiError(ApiError),
+    /// Tungstenite error
+    #[cfg(feature = "manager")]
+    WebSocketError(tokio_tungstenite::tungstenite::Error),
+    /// Reqwest error
+    #[cfg(feature = "rest")]
+    ReqwestError(reqwest::Error),
+    // /// Api Error
+    // ApiError(ApiError),
     /// Serde parse error
     ParseError(serde_json::Error),
     /// Gateway Error
@@ -16,10 +21,20 @@ pub enum Error {
     Custom(String),
 }
 
-// #[derive(Debug)]
-// pub enum DiscordError {
-//     SendError,
-// }
+impl Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Error::WebSocketError(err) => Display::fmt(err, f),
+            Error::ReqwestError(err) => Display::fmt(err, f),
+            // Error::ApiError(err) => Display::fmt(err, f),
+            Error::ParseError(err) => Display::fmt(err, f),
+            Error::GatewayClosed(err) => write!(f, "GatewayClosed({:?}", err),
+            Error::Custom(err) => f.write_str(&err),
+        }
+    }
+}
+
+impl std::error::Error for Error {}
 
 impl From<serde_json::Error> for Error {
     fn from(err: serde_json::Error) -> Self {
@@ -27,15 +42,29 @@ impl From<serde_json::Error> for Error {
     }
 }
 
-impl From<ApiError> for Error {
-    fn from(err: ApiError) -> Self {
-        Self::ApiError(err)
-    }
-}
+// impl From<ApiError> for Error {
+//     fn from(err: ApiError) -> Self {
+//         Self::ApiError(err)
+//     }
+// }
 
 impl From<CloseCode> for Error {
     fn from(code: CloseCode) -> Self {
         Self::GatewayClosed(Some(code))
+    }
+}
+
+#[cfg(feature = "manager")]
+impl From<tokio_tungstenite::tungstenite::Error> for Error {
+    fn from(err: tokio_tungstenite::tungstenite::Error) -> Self {
+        Self::WebSocketError(err)
+    }
+}
+
+#[cfg(feature = "rest")]
+impl From<reqwest::Error> for Error {
+    fn from(err: reqwest::Error) -> Self {
+        Self::ReqwestError(err)
     }
 }
 

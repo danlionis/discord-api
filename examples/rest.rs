@@ -1,9 +1,7 @@
-use std::error::Error;
-
-use discord::rest::client::Client;
+use discord::{rest::client::Client, Error};
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+async fn main() -> Result<(), Error> {
     let token = std::env::var("TOKEN").expect("missing token");
 
     env_logger::init();

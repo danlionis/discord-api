@@ -5,7 +5,7 @@
 //! # Example
 //!
 //! ```no_run
-//! # async fn run() -> Result<(), Box<dyn std::error::Error>> {
+//! # async fn run() -> Result<(), discord::Error> {
 //! # let token = "";
 //! let mut manager = discord::manager::connect(token).await?;
 //!
@@ -16,9 +16,9 @@
 //! # }
 //! ```
 
-use crate::{model::gateway::Event, proto::Connection, rest::client::Client};
+use crate::{model::gateway::Event, proto::Connection, rest::client::Client, Error};
 use futures::{sink::SinkExt, stream::StreamExt};
-use std::{error::Error, fmt::Debug, ops::Deref, sync::Arc, time::Duration};
+use std::{fmt::Debug, ops::Deref, sync::Arc, time::Duration};
 use tokio::{net::TcpStream, time::Interval};
 use tokio_tungstenite::{self as ws, WebSocketStream};
 use ws::{
@@ -44,7 +44,7 @@ use ws::{
 /// See [module docs][self]
 ///
 /// [`recv()`]: Manager::recv
-pub async fn connect<S>(token: S) -> Result<Manager, ws::tungstenite::Error>
+pub async fn connect<S>(token: S) -> Result<Manager, Error>
 where
     S: Into<String>,
 {
@@ -84,10 +84,10 @@ where
 ///
 /// # Example
 /// ```no_run
-/// # use std::{error::Error, sync::Arc};
-/// # use discord::model::gateway::Event;
+/// # use std::sync::Arc;
+/// # use discord::{model::gateway::Event, Error};
 /// #[tokio::main]
-/// async fn main() -> Result<(), Box<dyn Error>> {
+/// async fn main() -> Result<(), Error> {
 ///     let mut manager = discord::manager::connect("YOUR_TOKEN").await?;
 ///
 ///     while let Ok(event) = manager.recv().await {
@@ -136,7 +136,7 @@ impl Manager {
     }
 
     /// Receive an event from the gateway
-    pub async fn recv(&mut self) -> Result<Event, Box<dyn Error>> {
+    pub async fn recv(&mut self) -> Result<Event, Error> {
         loop {
             if let Some(event) = self.conn.events_ref_mut().pop_front() {
                 log::trace!("passing event to receiver: {:?}", event);
@@ -184,10 +184,7 @@ impl Manager {
         }
     }
 
-    async fn handle_ws_message(
-        &mut self,
-        msg: ws::tungstenite::Message,
-    ) -> Result<(), Box<dyn Error>> {
+    async fn handle_ws_message(&mut self, msg: ws::tungstenite::Message) -> Result<(), Error> {
         match msg {
             Message::Close(Some(CloseFrame { code, reason })) => {
                 log::debug!("conn closed: code= {} reason= {}", code, reason);

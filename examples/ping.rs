@@ -2,9 +2,10 @@ use discord::{
     model::gateway::Event,
     proto::Connection,
     rest::{client::Client, CreateMessageParams},
+    Error,
 };
 use futures::{sink::SinkExt, stream::StreamExt};
-use std::{error::Error, sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration};
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::TcpStream,
@@ -16,7 +17,7 @@ use ws::{
 };
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+async fn main() -> Result<(), Error> {
     let token = std::env::var("TOKEN").expect("missing token");
 
     env_logger::init();
@@ -81,7 +82,7 @@ async fn handle_ws_message(
     msg: ws::tungstenite::Message,
     conn: &mut Connection,
     rest: &Arc<Client>,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<(), Error> {
     match msg {
         Message::Close(Some(CloseFrame {
             code,

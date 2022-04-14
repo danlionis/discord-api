@@ -1,12 +1,13 @@
-use std::{error::Error, sync::Arc};
+use std::sync::Arc;
 
 use discord::{
     model::gateway::Event,
     rest::{client::Client, CreateMessageParams},
+    Error,
 };
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+async fn main() -> Result<(), Error> {
     let token = std::env::var("TOKEN").expect("missing token");
 
     env_logger::init();
