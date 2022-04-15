@@ -23,21 +23,27 @@ async fn main() -> Result<(), Error> {
 }
 
 async fn handle_event(rest: Arc<Client>, event: Event) {
-    if let Event::MessageCreate(msg) = event {
-        if msg.content.starts_with("!ping") {
-            let _ = rest
-                .create_message(
-                    msg.channel_id,
-                    CreateMessageParams::default()
-                        .content("Pong")
-                        .reference(msg.reference()),
-                )
-                .await;
+    match event {
+        Event::MessageCreate(msg) => {
+            if msg.content.starts_with("!ping") {
+                let _ = rest
+                    .create_message(
+                        msg.channel_id,
+                        CreateMessageParams::default()
+                            .content("Pong")
+                            .reference(msg.reference()),
+                    )
+                    .await;
+            }
+            if msg.content.starts_with("!react") {
+                let _ = rest
+                    .create_reaction(msg.channel_id, msg.id, "%F0%9F%98%80".to_owned())
+                    .await;
+            }
         }
-        if msg.content.starts_with("!react") {
-            let _ = rest
-                .create_reaction(msg.channel_id, msg.id, "%F0%9F%98%80".to_owned())
-                .await;
+        Event::ThreadCreate(channel) => {
+            dbg!(channel);
         }
+        _ => {}
     }
 }

@@ -2,7 +2,9 @@
 
 use crate::model::{gateway::Opcode, UnavailableGuild};
 use crate::model::{
-    Channel, Guild, GuildMember, Message, MessageDelete, MessageUpdate, Presence, User, VoiceState,
+    Channel, Guild, GuildMember, GuildScheduledEvent, GuildScheduledEventUser, Integration,
+    IntegrationDelete, Message, MessageDelete, MessageUpdate, Presence, ThreadListSync,
+    ThreadMember, ThreadMembersUpdate, User, VoiceState,
 };
 use serde::{
     de::{DeserializeSeed, Error as DeError, IgnoredAny, MapAccess, Visitor},
@@ -274,49 +276,103 @@ impl<'de> Visitor<'de> for GatewayEventVisitor<'_> {
 #[non_exhaustive]
 #[allow(missing_docs)]
 pub enum Event {
-    Resume,
+    ChannelCreate(Channel),
+    ChannelDelete(Channel),
+    ChannelPinsUpdates(ChannelPinsUpdate),
+    ChannelUpdate(Channel),
+    GuildBanAdd(GuildBanAdd),
+    GuildBanRemove(GuildBanRemove),
+    GuildCreate(Box<Guild>),
+    GuildDelete(UnavailableGuild),
+    GuildEmojisUpdate(GuildEmojisUpdate),
+    GuildIntegrationsUpdate(GuildIntegrationsUpdate),
+    GuildMemberAdd(GuildMember),
+    GuildMemberRemove(GuildMemberRemove),
+    GuildMemberUpdate(GuildMemberUpdate),
+    GuildMembersChunk(GuildMembersChunk),
+    GuildRoleCreate(GuildRoleCreate),
+    GuildRoleDelete(GuildRoleDelete),
+    GuildRoleUpdate(GuildRoleUpdate),
+    GuildUpdate(Box<Guild>),
+    InviteCreate(InviteCreate),
+    InviteDelete(InviteDelete),
     MessageCreate(Box<Message>),
-    MessageUpdate(Box<MessageUpdate>),
     MessageDelete(MessageDelete),
     MessageDeleteBulk(MessageDeleteBulk),
     MessageReactionAdd(Box<MessageReactionAdd>),
     MessageReactionRemove(MessageReactionRemove),
     MessageReactionRemoveAll(MessageReactionRemoveAll),
     MessageReactionRemoveEmoji(MessageReactionRemoveEmoji),
-    ChannelCreate(Channel),
-    ChannelDelete(Channel),
-    ChannelUpdate(Channel),
-    ChannelPinsUpdates(ChannelPinsUpdate),
-    GuildCreate(Box<Guild>),
-    GuildUpdate(Box<Guild>),
-    GuildDelete(UnavailableGuild),
-    GuildBanAdd(GuildBanAdd),
-    GuildEmojisUpdate(GuildEmojisUpdate),
-    GuildMembersChunk(GuildMembersChunk),
-    GuildIntegrationsUpdate(GuildIntegrationsUpdate),
-    GuildBanRemove(GuildBanRemove),
-    GuildMemberAdd(GuildMember),
-    GuildMemberRemove(GuildMemberRemove),
-    GuildMemberUpdate(GuildMemberUpdate),
-    GuildRoleCreate(GuildRoleCreate),
-    GuildRoleUpdate(GuildRoleUpdate),
-    GuildRoleDelete(GuildRoleDelete),
+    MessageUpdate(Box<MessageUpdate>),
     PresenceUpdate(Presence),
-    UserUpdate(User),
-    VoiceStateUpdate(VoiceState),
-    VoiceServerUpdate(VoiceServerUpdate),
     Ready(Ready),
+    Resume,
+    /// Sent when a thread is created, relevant to the current user, or when the current user is added to a thread. The inner payload is a channel object.
+    /// - When a thread is created, includes an additional `newly_created` boolean field.
+    /// - When being added to an existing private thread, includes a thread member object.
+    ThreadCreate(Channel),
+    /// Sent when a thread relevant to the current user is deleted.
+    /// The inner payload is a subset of the [`Channel`] object,
+    /// containing just the `id`, `guild_id`, `parent_id`, and `type` fields.
+    ThreadDelete(Channel),
+    /// Sent when the current user gains access to a channel.
+    ThreadListSync(ThreadListSync),
+    /// Sent when the [`ThreadMember`] object for the current user is updated.
+    /// The inner payload is a [`ThreadMember`] object with an extra `guild_id` field.
+    /// This event is documented for completeness, but unlikely to be used by most bots.
+    /// For bots, this event largely is just a signal that you are a member of the thread.
+    /// See the [threads docs](https://discord.com/developers/docs/topics/threads) for more details.
+    ThreadMemberUpdate(ThreadMember),
+
+    /// Sent when anyone is added to or removed from a thread.
+    /// If the current user does not have the GUILD_MEMBERS Gateway Intent,
+    /// then this event will only be sent if the current user was added to or removed from the thread.
+    ThreadMembersUpdate(ThreadMembersUpdate),
+
+    /// Sent when a thread is updated. The inner payload is a [`Channel`] object.
+    /// This is not sent when the field `last_message_id` is altered.
+    /// To keep track of the `last_message_id` changes, you must listen for [`MessageCreate`][Event::MessageCreate] events.
+    ThreadUpdate(Channel),
+
+    /// Sent when a guild scheduled event is created. The inner payload is a [`GuildScheduledEvent`].
+    GuildScheduledEventCreate(GuildScheduledEvent),
+
+    /// Sent when a guild scheduled event is updated. The inner payload is a [`GuildScheduledEvent`].
+    GuildScheduledEventUpdate(GuildScheduledEvent),
+
+    /// Sent when a guild scheduled event is deleted. The inner payload is a [`GuildScheduledEvent`].
+    GuildScheduledEventDelete(GuildScheduledEvent),
+
+    /// Sent when a user has subscribed to a guild scheduled event.
+    GuildScheduledEventUserAdd(GuildScheduledEventUser),
+
+    /// Sent when a user has unsubscribed from a guild scheduled event.
+    GuildScheduledEventUserRemove(GuildScheduledEventUser),
+
+    /// Sent when an integration is created. The inner payload is a [`Integration`] object with an additional `guild_id` key.
+    IntegrationCreate(Integration),
+
+    /// Sent when an integration is updated. The inner payload is a [`Integration`] object with an additional `guild_id` key.
+    IntegrationUpdate(Integration),
+
+    /// Sent when an integration is updated. The inner payload is a [`Integration`] object with an additional `guild_id` key.
+    IntegrationDelete(IntegrationDelete),
+
+    // /// Sent when a user in a guild uses an [Application
+    // /// Command](https://discord.com/developers/docs/interactions/application-commands).
+    // /// Inner payload is an [`Interaction`].
+    // InteractionCrate(Interaction),
     TypingStart(TypingStart),
-    InviteCreate(InviteCreate),
-    InviteDelete(InviteDelete),
-    WebhooksUpdate(WebhooksUpdate),
+
     UnknownEvent(String),
 
-    /// raw json event
-    Raw(String),
+    UserUpdate(User),
 
-    /// not a discord event, ocasionally fires with the current ping to the gateway
-    Ping(u128),
+    VoiceServerUpdate(VoiceServerUpdate),
+
+    VoiceStateUpdate(VoiceState),
+
+    WebhooksUpdate(WebhooksUpdate),
 }
 
 impl Event {
@@ -360,8 +416,20 @@ impl Event {
             Event::InviteDelete(_) => "INVITE_DELETE",
             Event::WebhooksUpdate(_) => "WEBHOOKS_UPDATE",
             Event::UnknownEvent(_) => "UNKNOWN",
-            Event::Raw(_) => "_RAW",
-            Event::Ping(_) => "_PING",
+            Event::ThreadCreate(_) => "THREAD_CREATE",
+            Event::ThreadUpdate(_) => "THREAD_UPDATE",
+            Event::ThreadDelete(_) => "THREAD_DELETE",
+            Event::ThreadMemberUpdate(_) => "THREAD_MEMBER_UPDATE",
+            Event::ThreadMembersUpdate(_) => "THREAD_MEMBERS_UPDATE",
+            Event::ThreadListSync(_) => "THREAD_LIST_SYNC",
+            Event::GuildScheduledEventCreate(_) => "GUILD_SCHEDULED_EVENT_CREATE",
+            Event::GuildScheduledEventUpdate(_) => "GUILD_SCHEDULED_EVENT_UPDATE",
+            Event::GuildScheduledEventDelete(_) => "GUILD_SCHEDULED_EVENT_DELETE",
+            Event::GuildScheduledEventUserAdd(_) => "GUILD_SCHEDULED_EVENT_USER_ADD",
+            Event::GuildScheduledEventUserRemove(_) => "GUILD_SCHEDULED_EVENT_USER_REMOVE",
+            Event::IntegrationCreate(_) => "INTEGRATION_CREATE",
+            Event::IntegrationUpdate(_) => "INTEGRATION_UPDATE",
+            Event::IntegrationDelete(_) => "INTEGRATION_DELETE",
         }
     }
 }
@@ -450,6 +518,31 @@ impl<'de> DeserializeSeed<'de> for DispatchEventSeed<'_> {
             // "PRESENCES_REPLACE" => DispatchEvent::Unhandled,
             "TYPING_START" => Event::TypingStart(TypingStart::deserialize(deserializer)?),
             "USER_UPDATE" => Event::UserUpdate(User::deserialize(deserializer)?),
+            "THREAD_CREATE" => Event::ThreadCreate(Channel::deserialize(deserializer)?),
+            "THREAD_UPDATE" => Event::ThreadUpdate(Channel::deserialize(deserializer)?),
+            "THREAD_DELETE" => Event::ThreadDelete(Channel::deserialize(deserializer)?),
+            "THREAD_LIST_SYNC" => Event::ThreadListSync(ThreadListSync::deserialize(deserializer)?),
+            "GUILD_SCHEDULED_EVENT_CREATE" => {
+                Event::GuildScheduledEventCreate(GuildScheduledEvent::deserialize(deserializer)?)
+            }
+            "GUILD_SCHEDULED_EVENT_UPDATE" => {
+                Event::GuildScheduledEventUpdate(GuildScheduledEvent::deserialize(deserializer)?)
+            }
+            "GUILD_SCHEDULED_EVENT_DELETE" => {
+                Event::GuildScheduledEventDelete(GuildScheduledEvent::deserialize(deserializer)?)
+            }
+            "GUILD_SCHEDULED_EVENT_USER_ADD" => Event::GuildScheduledEventUserAdd(
+                GuildScheduledEventUser::deserialize(deserializer)?,
+            ),
+            "GUILD_SCHEDULED_EVENT_USER_REMOVE" => Event::GuildScheduledEventUserRemove(
+                GuildScheduledEventUser::deserialize(deserializer)?,
+            ),
+            "THREAD_MEMBER_UPDATE" => {
+                Event::ThreadMemberUpdate(ThreadMember::deserialize(deserializer)?)
+            }
+            "THREAD_MEMBERS_UPDATE" => {
+                Event::ThreadMembersUpdate(ThreadMembersUpdate::deserialize(deserializer)?)
+            }
             "VOICE_SERVER_UPDATE" => {
                 Event::VoiceServerUpdate(VoiceServerUpdate::deserialize(deserializer)?)
             }

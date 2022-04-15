@@ -1,11 +1,13 @@
 //! Channel types
 use crate::model::{
     id::{ApplicationId, ChannelId, GuildId, MessageId, UserId},
-    PermissonOverwrite, User,
+    PermissonOverwrite, ThreadMetadata, User,
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::{convert::TryFrom, ops::Deref};
+
+use super::ThreadMember;
 
 /// Represents the most general channel type within Discord
 ///
@@ -68,6 +70,33 @@ pub struct Channel {
 
     /// when the last pinnded message was pinned
     pub last_pin_timestamp: Option<DateTime<Utc>>,
+
+    /// voice region id for the voice channel, automatic when set to null
+    pub rtc_region: Option<String>,
+
+    /// the camera video quality mode of the voice channel, 1 when not present
+    pub video_quality_mode: Option<i32>,
+
+    /// an approximate count of messages in a thread, stops counting at 50
+    pub message_count: Option<i32>,
+
+    /// an approximate count of users in a thread, stops counting at 50
+    pub member_count: Option<i32>,
+
+    /// thread-specific fields not needed by other channels
+    pub thread_metadata: Option<ThreadMetadata>,
+
+    /// thread member object for the current user, if they have joined the thread, only included on certain API endpoints
+    pub member: Option<ThreadMember>,
+
+    /// default duration that the clients (not the API) will use for newly created threads, in minutes, to automatically archive the thread after recent activity, can be set to: 60, 1440, 4320, 10080
+    pub default_auto_archive_duration: Option<i32>,
+
+    /// computed permissions for the invoking user in the channel, including overwrites, only included when part of the `resolved` data received on a slash command interaction
+    pub permissions: Option<String>,
+
+    /// channel flags combined as a bitfield
+    pub flags: Option<i32>,
 }
 
 impl AsRef<ChannelId> for Channel {

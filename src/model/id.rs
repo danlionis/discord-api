@@ -84,5 +84,10 @@ impl_snowflake!(
     AttachmentId,
     StickerId,
     PackId,
-    WebhookId
+    WebhookId,
+    EventId,
+    EntityId,
+    IntegrationId,
+    InteractionId,
+    ApplicationCommandId
 );
