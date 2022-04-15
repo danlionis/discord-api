@@ -1,10 +1,8 @@
 use std::sync::Arc;
 
-use discord::{
-    model::gateway::Event,
-    rest::{client::Client, CreateMessageParams},
-    Error,
-};
+use discord::Error;
+use twilight_http::{request::channel::reaction::RequestReactionType, Client};
+use twilight_model::gateway::event::Event;
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
@@ -26,17 +24,20 @@ async fn handle_event(rest: Arc<Client>, event: Event) {
     if let Event::MessageCreate(msg) = event {
         if msg.content.starts_with("!ping") {
             let _ = rest
-                .create_message(
-                    msg.channel_id,
-                    CreateMessageParams::default()
-                        .content("Pong")
-                        .reference(msg.reference()),
-                )
+                .create_message(msg.channel_id)
+                .content("pong")
+                .unwrap()
+                .exec()
                 .await;
         }
         if msg.content.starts_with("!react") {
             let _ = rest
-                .create_reaction(msg.channel_id, msg.id, "%F0%9F%98%80".to_owned())
+                .create_reaction(
+                    msg.channel_id,
+                    msg.id,
+                    &RequestReactionType::Unicode { name: "😀" },
+                )
+                .exec()
                 .await;
         }
     }

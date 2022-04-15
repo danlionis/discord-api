@@ -58,11 +58,32 @@
 //! [`recv_json()`]: Connection::recv_json
 //! [`send_iter()`]: Connection::send_iter
 //! [`send()`]: Connection::send
-use crate::{
-    error::CloseCode,
-    model::gateway::{Event, GatewayCommand, GatewayEvent, Identify, Resume},
+
+use serde::Serialize;
+use twilight_model::gateway::{
+    event::{DispatchEvent, Event, GatewayEvent},
+    payload::outgoing::{
+        identify::{IdentifyInfo, IdentifyProperties},
+        Heartbeat, Identify, RequestGuildMembers, Resume, UpdatePresence, UpdateVoiceState,
+    },
+    Intents,
 };
+
+use crate::error::CloseCode;
+// model::gateway::{Event, GatewayCommand, GatewayEvent, Identify, Resume},
 use std::collections::VecDeque;
+
+#[allow(missing_docs)]
+#[derive(Debug, PartialEq, Eq, Serialize)]
+#[serde(untagged)]
+pub enum GatewayCommand {
+    Identify(Identify),
+    Heartbeat(Heartbeat),
+    RequestGulidMembers(RequestGuildMembers),
+    Resume(Resume),
+    UpdatePresence(UpdatePresence),
+    UpdateVoiceState(UpdateVoiceState),
+}
 
 const RECV_QUEUE_SIZE: usize = 1;
 const SEND_QUEUE_SIZE: usize = 1;
@@ -165,7 +186,7 @@ impl Connection {
     /// ```
     pub fn queue_heartbeat(&mut self) {
         self.send_queue
-            .push_back(GatewayCommand::Heartbeat(self.seq))
+            .push_back(GatewayCommand::Heartbeat(Heartbeat::new(self.seq)))
     }
 
     /// Process a close code received from the gateway websocket connection
@@ -201,18 +222,13 @@ impl Connection {
 
     /// Processes discord events received from the gateway
     pub fn recv(&mut self, event: GatewayEvent) {
-        log::debug!(
-            "recv event: kind= {} state= {:?}",
-            event.kind(),
-            self.state()
-        );
         log::trace!("gateway event= {:?}", event);
 
         // we've received an event so the socket can't be closed
         self.socket_closed = false;
 
         // an invalid session can potentially be resumed
-        if let GatewayEvent::InvalidSession(resumable) = event {
+        if let GatewayEvent::InvalidateSession(resumable) = event {
             self.state = if resumable {
                 State::Resume
             } else {
@@ -240,66 +256,87 @@ impl Connection {
         }
 
         // hello events indicate that the underlying socket has (re)connected to the gateway
-        if let GatewayEvent::Hello(ref hello) = event {
-            log::debug!(
-                "recv hello: heartbeat_interval= {}",
-                hello.heartbeat_interval
-            );
+        if let GatewayEvent::Hello(heartbeat_interval) = event {
+            log::debug!("recv hello: heartbeat_interval= {}", heartbeat_interval);
 
-            self.heartbeat_interval = hello.heartbeat_interval;
+            self.heartbeat_interval = heartbeat_interval;
 
             self.state = match self.state {
                 // if the connection was ready we try to resume first
                 State::Resume | State::Ready => {
                     self.send_queue
                         .push_back(GatewayCommand::Resume(Resume::new(
-                            self.token.clone(),
-                            self.session_id.clone(),
                             self.seq,
+                            self.session_id.clone(),
+                            self.token.clone(),
                         )));
                     State::Replaying
                 }
                 // client got reconnected
                 _ => {
-                    self.send_queue.push_back(GatewayCommand::Identify(
-                        Identify::builder(&self.token).build(),
-                    ));
+                    self.send_queue
+                        .push_back(GatewayCommand::Identify(Identify::new(IdentifyInfo {
+                            compress: false,
+                            token: self.token.clone(),
+                            shard: Some([0, 1]),
+                            intents: Intents::all(),
+                            large_threshold: 100000,
+                            presence: None,
+                            properties: IdentifyProperties::new(
+                                "twilight.rs",
+                                "twilight.rs",
+                                "OS",
+                                "",
+                                "",
+                            ),
+                        })));
                     State::Identify
                 }
             }
         }
 
-        if let GatewayEvent::Dispatch(_seq, Event::Ready(ref ready)) = event {
-            log::info!(
-                "client ready: version= {} session_id= {} tag= {} shard= {:?}",
-                ready.version,
-                ready.session_id,
-                ready.user.tag(),
-                ready.shard
-            );
+        if let GatewayEvent::Dispatch(_seq, event) = &event {
+            match event.as_ref() {
+                DispatchEvent::Ready(ready) => {
+                    log::info!(
+                        "client ready: version= {} session_id= {} tag= {}#{} shard= {:?}",
+                        ready.version,
+                        ready.session_id,
+                        ready.user.name,
+                        ready.user.discriminator(),
+                        ready.shard
+                    );
 
-            self.session_id = ready.session_id.clone();
-            self.state = State::Ready;
-        }
-
-        if let GatewayEvent::Dispatch(_seq, Event::Resume) = event {
-            log::info!("resumed: session_id= {}", self.session_id);
-            self.state = State::Ready;
+                    self.session_id = ready.session_id.clone();
+                    self.state = State::Ready;
+                }
+                DispatchEvent::Resumed => {
+                    log::info!("resumed: session_id= {}", self.session_id);
+                    self.state = State::Ready;
+                }
+                _ => {}
+            }
         }
 
         // forward all dispatch events, no matter the state
         if let GatewayEvent::Dispatch(seq, event) = event {
-            log::debug!("recv dispatch: kind= {} seq= {}", event.kind(), seq);
+            log::debug!("recv dispatch: kind= {:?} seq= {}", event.kind(), seq);
 
             self.seq = seq;
-            self.recv_queue.push_back(event);
+            self.recv_queue.push_back((*event).into());
         }
     }
 
     /// Processes a discord event received from the gateway
     #[cfg(feature = "json")]
-    pub fn recv_json(&mut self, event: &str) -> Result<(), serde_json::Error> {
-        let event = GatewayEvent::from_json_str(event)?;
+    pub fn recv_json(&mut self, input: &str) -> Result<(), serde_json::Error> {
+        use serde::de::DeserializeSeed;
+        use serde_json::Deserializer;
+        use twilight_model::gateway::event::GatewayEventDeserializer;
+
+        let deserializer = GatewayEventDeserializer::from_json(input).unwrap();
+        let mut json_deserializer = Deserializer::from_str(input);
+        let event = deserializer.deserialize(&mut json_deserializer).unwrap();
 
         self.recv(event);
 

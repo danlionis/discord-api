@@ -16,11 +16,13 @@
 //! # }
 //! ```
 
-use crate::{model::gateway::Event, proto::Connection, rest::client::Client, Error};
+use crate::{proto::Connection, Error};
 use futures::{sink::SinkExt, stream::StreamExt};
 use std::{fmt::Debug, ops::Deref, sync::Arc, time::Duration};
 use tokio::{net::TcpStream, time::Interval};
 use tokio_tungstenite::{self as ws, WebSocketStream};
+use twilight_http::Client;
+use twilight_model::gateway::event::Event;
 use ws::{
     tungstenite::{protocol::CloseFrame, Message},
     MaybeTlsStream,
@@ -53,9 +55,9 @@ where
     let mut conn = Connection::new(token.clone());
 
     let url = {
-        let mut gateway_info = rest.get_gateway_bot().await.unwrap();
-        gateway_info.url.push_str("/?v=9");
-        gateway_info.url
+        let mut info = rest.gateway().exec().await?.model().await.unwrap();
+        info.url.push_str("/?v=9");
+        info.url
     };
 
     let (mut socket, _) = ws::connect_async(&url).await.unwrap();
@@ -191,7 +193,6 @@ impl Manager {
                 self.conn.recv_close_code(code);
             }
             Message::Text(msg) => {
-                dbg!(&msg);
                 self.conn.recv_json(&msg)?;
             }
             msg => {

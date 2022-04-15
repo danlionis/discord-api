@@ -1,6 +1,8 @@
 //! Error types
 
 use std::fmt::Display;
+#[cfg(feature = "rest")]
+use twilight_http::Error as HttpError;
 
 /// Discord Error Types
 #[derive(Debug)]
@@ -10,7 +12,7 @@ pub enum Error {
     WebSocketError(tokio_tungstenite::tungstenite::Error),
     /// Reqwest error
     #[cfg(feature = "rest")]
-    ReqwestError(reqwest::Error),
+    HttpError(HttpError),
     // /// Api Error
     // ApiError(ApiError),
     /// Serde parse error
@@ -28,7 +30,7 @@ impl Display for Error {
             #[cfg(feature = "manager")]
             Error::WebSocketError(err) => Display::fmt(err, f),
             #[cfg(feature = "rest")]
-            Error::ReqwestError(err) => Display::fmt(err, f),
+            Error::HttpError(err) => Display::fmt(err, f),
             // Error::ApiError(err) => Display::fmt(err, f),
             #[cfg(feature = "json")]
             Error::ParseError(err) => Display::fmt(err, f),
@@ -67,9 +69,9 @@ impl From<tokio_tungstenite::tungstenite::Error> for Error {
 }
 
 #[cfg(feature = "rest")]
-impl From<reqwest::Error> for Error {
-    fn from(err: reqwest::Error) -> Self {
-        Self::ReqwestError(err)
+impl From<HttpError> for Error {
+    fn from(err: HttpError) -> Self {
+        Self::HttpError(err)
     }
 }
 

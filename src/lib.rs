@@ -15,9 +15,7 @@ pub mod cache;
 pub mod error;
 #[cfg(feature = "manager")]
 pub mod manager;
-pub mod model;
 pub mod proto;
-pub mod rest;
 pub mod util;
 
 mod snowflake;
