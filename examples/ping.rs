@@ -1,24 +1,24 @@
 use discord::{
-    model::gateway::Event,
-    proto::Connection,
-    rest::{client::Client, CreateMessageParams},
-    Error,
+    model::gateway::{event::DispatchEvent, Intents},
+    proto::{Config, GatewayContext},
+    Error, API_VERSION,
 };
 use futures::{sink::SinkExt, stream::StreamExt};
-use std::{sync::Arc, time::Duration};
+use std::{convert::TryFrom, sync::Arc, time::Duration};
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::TcpStream,
 };
-use tokio_tungstenite as ws;
-use ws::{
+use tokio_tungstenite::{
+    self as ws,
     tungstenite::{protocol::CloseFrame, Message},
     MaybeTlsStream, WebSocketStream,
 };
+use twilight_http::Client;
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
-    let token = std::env::var("TOKEN").expect("missing token");
+    let token = std::env::args().skip(1).next().expect("missing token");
 
     env_logger::init();
 
@@ -26,14 +26,17 @@ async fn main() -> Result<(), Error> {
     let rest = Arc::new(Client::new(token.to_string()));
 
     // connect to websocket
-    let mut gateway_info = rest.get_gateway_bot().await?;
-    log::debug!("gateway: {:?}", gateway_info);
-    gateway_info.url.push_str("/?v=9");
-    let url = gateway_info.url.as_str();
-    let (mut socket, _) = ws::connect_async(url).await?;
+    let info = {
+        let mut info = rest.gateway().authed().exec().await?.model().await.unwrap();
+        info.url.push_str("/?v=");
+        info.url.push_str(&API_VERSION.to_string());
+        info
+    };
+    let (mut socket, _) = ws::connect_async(&info.url).await?;
 
     // initialize connection and receive first hello packet
-    let mut conn = Connection::new(token);
+    let config = Config::new(token, Intents::GUILD_MESSAGES);
+    let mut conn = GatewayContext::new(config);
     let hello = socket.next().await.unwrap()?;
     let hello = hello.to_text()?;
     conn.recv_json(hello)?;
@@ -44,7 +47,7 @@ async fn main() -> Result<(), Error> {
     loop {
         // reconnect the websocket if requested
         if conn.should_reconnect() {
-            socket = reconnect_socket(socket, url).await?;
+            socket = reconnect_socket(socket, &info.url).await?;
         }
 
         if let Some(code) = conn.failed() {
@@ -62,7 +65,7 @@ async fn main() -> Result<(), Error> {
                     }
                     _ => {
                         log::info!("an error occured, closing connection and reconnecting");
-                        socket = reconnect_socket( socket, url).await?;
+                        socket = reconnect_socket(socket, &info.url).await?;
                     }
                 }
             }
@@ -80,7 +83,7 @@ async fn main() -> Result<(), Error> {
 
 async fn handle_ws_message(
     msg: ws::tungstenite::Message,
-    conn: &mut Connection,
+    conn: &mut GatewayContext,
     rest: &Arc<Client>,
 ) -> Result<(), Error> {
     match msg {
@@ -94,7 +97,9 @@ async fn handle_ws_message(
             conn.recv_json(&msg)?;
 
             for event in conn.events() {
-                tokio::spawn(handle_event(event, Arc::clone(rest)));
+                if let Ok(event) = DispatchEvent::try_from(event) {
+                    tokio::spawn(handle_event(event, Arc::clone(rest)));
+                }
             }
         }
         msg => {
@@ -118,11 +123,15 @@ where
     Ok(socket)
 }
 
-async fn handle_event(event: Event, rest: Arc<Client>) {
-    if let Event::MessageCreate(msg) = event {
+async fn handle_event(event: DispatchEvent, rest: Arc<Client>) {
+    if let DispatchEvent::MessageCreate(msg) = event {
         if msg.content.contains("ping") {
-            let params = CreateMessageParams::default().content("Pong");
-            rest.create_message(msg.channel_id, params).await.unwrap();
+            rest.create_message(msg.channel_id)
+                .content("Pong")
+                .unwrap()
+                .exec()
+                .await
+                .unwrap();
         }
     }
 }

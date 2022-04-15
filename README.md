@@ -1,8 +1,5 @@
 # Discord Library
 
-STILL UNDER DEVELOPMENT!
-LOOKING FOR A GOOD NAME!
-
 Low level implementation of the discord gateway protocol.
 The library handles the state of the gateway connection by processing incoming messages and generating outgoing messages.
 
@@ -13,6 +10,9 @@ The library also provides a basic managed connection (behind the `manager` featu
 This Manager uses [tokio](https://github.com/tokio-rs/tokio) and [tokio\_tungstenite](https://github.com/snapview/tokio-tungstenite) as its I/O stack.
 This is probably the best choice for most useres if you are looking for the easiest way to get your bot running.
 
+Models are provided by the [`twilight_model`](https://github.com/twilight-rs/twilight) crate.
+Custom models would be too hard to maintain and not worth it when there is already an excellent library for that.
+
 This protocol handling is inspired by Cloudflares [quiche](https://github.com/cloudflare/quiche) pattern of handling I/O and state.
 
 # Getting started
@@ -22,18 +22,18 @@ The repo provides two examples:
 
 A basic ping example that directly interacts with the connection by forwarding incoming packets:
 ```bash
-$ cargo run --example ping --all-features
+$ cargo run --example ping --all-features <token>
 ```
 and a managed connection that also handles the io
 ```bash
-$ cargo run --example manager_ping --all-features
+$ cargo run --example manager_ping --all-features <token>
 ```
-Both examples require the `TOKEN` environment variable to be set to your bot token
 
 ## Connecting
-The first step in establishing a connection is to create a Connection object with you login token:
+The first step in establishing a connection is to create a GatewayContext object with your login token and your Intents:
 ```rust
-let conn = Connection::new();
+let config = Config::new("<token>", Intents::all());
+let conn = Connection::new(config);
 ```
 Since the Connection doesn't handle I/O by itself it stays in a closed state until it receives the correct packets from the gateway.
 
@@ -45,7 +45,7 @@ loop {
     match websocket.recv() {
         Ok(gateway_event) => {
             // handle event...
-            conn.recv(gateway_event);ko
+            conn.recv(gateway_event);
         },
         Err(close_code) > {
             // handle websocket closing...
