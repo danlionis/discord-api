@@ -138,7 +138,7 @@ impl Manager {
     /// Receive an event from the gateway
     pub async fn recv(&mut self) -> Result<Event, Error> {
         loop {
-            if let Some(event) = self.conn.events_ref_mut().pop_front() {
+            if let Some(event) = self.conn.event() {
                 log::trace!("passing event to receiver: {:?}", event);
                 return Ok(event);
             }
@@ -161,11 +161,11 @@ impl Manager {
                             self.handle_ws_message(msg).await?;
                         }
                         Some(Err(e)) => {
-                            log::warn!("an error occured, reconnecting... : {}", e);
+                            log::warn!("an error occured while receiving a message: {}", e);
                             self.reconnect_socket().await?;
                         }
                         None => {
-                            log::warn!("stream closed, reconnecting...");
+                            log::warn!("websocket stream closed...");
                             self.reconnect_socket().await?;
                         }
                     }
@@ -191,10 +191,11 @@ impl Manager {
                 self.conn.recv_close_code(code);
             }
             Message::Text(msg) => {
+                dbg!(&msg);
                 self.conn.recv_json(&msg)?;
             }
             msg => {
-                log::info!("ignoring unexpected message: {:?}", msg);
+                log::warn!("ignoring unexpected message: {:?}", msg);
             }
         }
         Ok(())

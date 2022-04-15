@@ -68,6 +68,8 @@ const RECV_QUEUE_SIZE: usize = 1;
 const SEND_QUEUE_SIZE: usize = 1;
 
 /// Discord gateway connection handler to
+///
+/// TODO: maybe rename to GatewayContext
 #[derive(Debug)]
 pub struct Connection {
     token: String,
@@ -126,7 +128,7 @@ impl Connection {
     }
 
     /// Get a mutable reference to the underlying event queue
-    pub fn events_ref_mut(&mut self) -> &mut VecDeque<Event> {
+    pub fn events_mut(&mut self) -> &mut VecDeque<Event> {
         &mut self.recv_queue
     }
 
