@@ -4,7 +4,7 @@ use twilight_model::gateway::{
 };
 
 /// Connection Config
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 #[allow(missing_docs)]
 pub struct Config {
     pub gateway_url: Option<String>,
@@ -14,6 +14,12 @@ pub struct Config {
     pub presence: Option<UpdatePresencePayload>,
     pub shard: [u64; 2],
     pub token: String,
+}
+
+impl From<(&str, Intents)> for Config {
+    fn from((token, intents): (&str, Intents)) -> Self {
+        Config::new(token, intents)
+    }
 }
 
 impl Config {

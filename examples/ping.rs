@@ -1,4 +1,5 @@
 use discord::{
+    model::gateway::{event::DispatchEvent, Intents},
     proto::{Config, GatewayContext},
     Error, API_VERSION,
 };
@@ -8,17 +9,16 @@ use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::TcpStream,
 };
-use tokio_tungstenite as ws;
-use twilight_http::Client;
-use twilight_model::gateway::{event::DispatchEvent, Intents};
-use ws::{
+use tokio_tungstenite::{
+    self as ws,
     tungstenite::{protocol::CloseFrame, Message},
     MaybeTlsStream, WebSocketStream,
 };
+use twilight_http::Client;
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
-    let token = std::env::var("TOKEN").expect("missing token");
+    let token = std::env::args().skip(1).next().expect("missing token");
 
     env_logger::init();
 

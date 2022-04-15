@@ -5,8 +5,7 @@
 //! # Example
 //!
 //! ```no_run
-//! # use twilight_model::gateway::Intents;
-//! # use discord::proto::*;
+//! # use discord::{proto::*, model::gateway::Intents};
 //! # async fn run() -> Result<(), discord::Error> {
 //! # let token = "";
 //! let config = Config::new(token, Intents::all());
@@ -55,7 +54,7 @@ use ws::{
 pub async fn connect(config: Config) -> Result<Manager, Error> {
     let token = config.token.clone();
     let rest = Client::new(token.clone());
-    let mut ctx = GatewayContext::new(config);
+    let mut ctx = GatewayContext::new(config.clone());
 
     let info = {
         let mut info = rest.gateway().authed().exec().await?.model().await.unwrap();
@@ -77,7 +76,7 @@ pub async fn connect(config: Config) -> Result<Manager, Error> {
         ctx,
         socket,
         rest: Arc::new(rest),
-        token,
+        config,
         url: info.url,
         interval,
     })
@@ -86,12 +85,12 @@ pub async fn connect(config: Config) -> Result<Manager, Error> {
 /// Managed connection to the discord gateway
 ///
 /// This manager uses the [tokio_tungstenite](https://docs.rs/tokio-tungstenite) crate for
-/// websockets and the included [`Client`](Client) as REST client.
+/// websockets and the `twilight_http` [`Client`](Client) REST client.
 pub struct Manager {
     ctx: GatewayContext,
     socket: WebSocketStream<MaybeTlsStream<TcpStream>>,
     rest: Arc<Client>,
-    token: String,
+    config: Config,
     url: String,
     interval: Interval,
 }
@@ -102,7 +101,7 @@ impl Debug for Manager {
             .field("conn", &self.ctx)
             // .field("socket", &self.socket)
             .field("rest", &self.rest)
-            .field("token", &self.token)
+            .field("token", &self.config.token)
             .field("url", &self.url)
             .field("interval", &self.interval)
             .finish()

@@ -22,13 +22,14 @@
 //! connection updates it's state
 //!
 //! ```no_run
-//! # use discord::proto::{GatewayContext, Config};
+//! # use discord::proto::GatewayContext;
 //! # use twilight_model::gateway::{Intents, event::GatewayEvent};
 //! # fn recv_from_socket() -> GatewayEvent { unimplemented!() };
-//! # let mut conn = GatewayContext::new(Config::new("TOKEN", Intents::empty()));
+//! # let mut conn = GatewayContext::new(("TOKEN", Intents::empty()));
 //! let event = recv_from_socket();
 //!
 //! conn.recv(event);
+//!
 //! ```
 //! If the socket provides the data formatted as a JSON string the [`recv_json()`] method can be used instead.
 //!
@@ -38,21 +39,32 @@
 //! - [`send()`] creates a single command
 //!
 //! ```no_run
-//! # use discord::proto::{GatewayContext, GatewayCommand, Config};
-//! # use twilight_model::gateway::Intents;
+//! # use discord::{proto::{GatewayContext, GatewayCommand}, model::gateway::Intents};
 //! # fn send_to_socket(cmd: GatewayCommand) { unimplemented!() };
-//! # let mut conn = GatewayContext::new(Config::new("TOKEN", Intents::empty()));
-//! for cmd in conn.send_iter() {
+//! # let mut ctx = GatewayContext::new(("TOKEN", Intents::empty()));
+//! for cmd in ctx.send_iter() {
 //!     send_to_socket(cmd);
 //! }
 //!
-//! while let Some(cmd) = conn.send() {
+//! while let Some(cmd) = ctx.send() {
 //!     send_to_socket(cmd);
 //! }
 //! ```
 //!
 //! Both `send` methods are also available as `_json` variants to directly generate JSON serialized
 //! commands
+//!
+//! # Heartbeating
+//! The application is responsible to maintain a heartbeat timer and queue heartbeat packets at the
+//! corret time.
+//!
+//! To obtain the timer interval and queue the heartbeat message use the following methods:
+//! ```
+//! use discord::{proto::GatewayContext, model::gateway::Intents};
+//! # let mut ctx = GatewayContext::new(("", Intents::empty()));
+//! let heartbeat_interval = ctx.heartbeat_interval();
+//! ctx.queue_heartbeat();
+//! ```
 //!
 //!
 //! [`recv()`]: GatewayContext::recv
@@ -158,9 +170,12 @@ impl GatewayContext {
     }
 
     /// Create a new GatewayContext to the discord gateway
-    pub fn new(config: Config) -> Self {
+    pub fn new<C>(config: C) -> Self
+    where
+        C: Into<Config>,
+    {
         GatewayContext {
-            config,
+            config: config.into(),
             seq: 0,
             heartbeat_interval: 0,
             recv_queue: VecDeque::with_capacity(RECV_QUEUE_SIZE),
@@ -175,9 +190,9 @@ impl GatewayContext {
     ///
     /// # Example
     /// ```
-    /// # use discord::proto::*;
+    /// # use discord::proto::{GatewayContext, GatewayCommand};
     /// # use twilight_model::gateway::{Intents, payload::outgoing::Heartbeat};
-    /// # let mut conn = GatewayContext::new(Config::new("TOKEN", Intents::empty()));
+    /// # let mut conn = GatewayContext::new(("TOKEN", Intents::empty()));
     /// conn.queue_heartbeat();
     /// assert_eq!(Some(GatewayCommand::Heartbeat(Heartbeat::new(0))), conn.send());
     /// ```
@@ -190,9 +205,9 @@ impl GatewayContext {
     ///
     /// # Example
     /// ```
-    /// # use discord::{proto::{GatewayContext, Config}, error::CloseCode};
+    /// # use discord::{proto::GatewayContext, error::CloseCode};
     /// # use twilight_model::gateway::Intents;
-    /// # let mut conn = GatewayContext::new(Config::new("TOKEN", Intents::empty()));
+    /// # let mut conn = GatewayContext::new(("TOKEN", Intents::empty()));
     /// // connection closed normally
     /// conn.recv_close_code(1000u16);
     /// assert!(conn.should_reconnect());
@@ -334,10 +349,10 @@ impl GatewayContext {
     ///
     /// # Example
     /// ```no_run
-    /// # use discord::proto::{GatewayContext, GatewayCommand, Config};
+    /// # use discord::proto::{GatewayContext, GatewayCommand};
     /// # use twilight_model::gateway::Intents;
     /// # fn send_to_socket(cmd: GatewayCommand) { unimplemented!() };
-    /// # let mut conn = GatewayContext::new(Config::new("TOKEN", Intents::empty()));
+    /// # let mut conn = GatewayContext::new(("TOKEN", Intents::empty()));
     /// for cmd in conn.send_iter() {
     ///     send_to_socket(cmd);
     /// }
@@ -362,10 +377,10 @@ impl GatewayContext {
     ///
     /// # Example
     /// ```
-    /// # use discord::proto::{GatewayContext, GatewayCommand, Config};
+    /// # use discord::proto::{GatewayContext, GatewayCommand};
     /// # use twilight_model::gateway::Intents;
     /// # fn send_to_socket(cmd: GatewayCommand) { unimplemented!() };
-    /// # let mut conn = GatewayContext::new(Config::new("TOKEN", Intents::empty()));
+    /// # let mut conn = GatewayContext::new(("TOKEN", Intents::empty()));
     /// while let Some(cmd) = conn.send() {
     ///     send_to_socket(cmd);
     /// }
@@ -467,7 +482,7 @@ mod tests {
     #[test]
     fn test_connect() {
         let token = "TOKEN";
-        let mut conn = GatewayContext::new(Config::new(token.to_string(), Intents::empty()));
+        let mut conn = GatewayContext::new((token, Intents::empty()));
         assert_eq!(State::Closed, *conn.state());
 
         let hello = GatewayEvent::Hello(10);
@@ -492,7 +507,7 @@ mod tests {
     #[test]
     fn test_resume() {
         let token = "TOKEN";
-        let mut conn = GatewayContext::new(Config::new(token.to_string(), Intents::empty()));
+        let mut conn = GatewayContext::new((token, Intents::empty()));
         let _session_id = "session_id".to_string();
         assert_eq!(State::Closed, *conn.state());
 
@@ -521,7 +536,7 @@ mod tests {
     #[test]
     fn test_invalid_session() {
         let token = "TOKEN";
-        let mut conn = GatewayContext::new(Config::new(token.to_string(), Intents::empty()));
+        let mut conn = GatewayContext::new((token, Intents::empty()));
         assert_eq!(State::Closed, *conn.state());
 
         conn.recv(GatewayEvent::InvalidateSession(true));
@@ -540,7 +555,7 @@ mod tests {
     #[test]
     fn test_heartbeat_request() {
         let token = "TOKEN";
-        let mut conn = GatewayContext::new(Config::new(token.to_string(), Intents::empty()));
+        let mut conn = GatewayContext::new((token, Intents::empty()));
         assert_eq!(State::Closed, *conn.state());
 
         conn.recv(GatewayEvent::Heartbeat(1));
