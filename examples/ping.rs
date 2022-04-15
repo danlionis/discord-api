@@ -1,16 +1,13 @@
-use discord::{
-    model::gateway::Event,
-    proto::Connection,
-    rest::{client::Client, CreateMessageParams},
-    Error,
-};
+use discord::{proto::Connection, Error};
 use futures::{sink::SinkExt, stream::StreamExt};
-use std::{sync::Arc, time::Duration};
+use std::{convert::TryFrom, sync::Arc, time::Duration};
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::TcpStream,
 };
 use tokio_tungstenite as ws;
+use twilight_http::Client;
+use twilight_model::gateway::event::DispatchEvent;
 use ws::{
     tungstenite::{protocol::CloseFrame, Message},
     MaybeTlsStream, WebSocketStream,
@@ -26,10 +23,10 @@ async fn main() -> Result<(), Error> {
     let rest = Arc::new(Client::new(token.to_string()));
 
     // connect to websocket
-    let mut gateway_info = rest.get_gateway_bot().await?;
-    log::debug!("gateway: {:?}", gateway_info);
-    gateway_info.url.push_str("/?v=9");
-    let url = gateway_info.url.as_str();
+    let mut info = rest.gateway().authed().exec().await?.model().await.unwrap();
+    log::debug!("gateway: {:?}", info);
+    info.url.push_str("/?v=9");
+    let url = info.url.as_str();
     let (mut socket, _) = ws::connect_async(url).await?;
 
     // initialize connection and receive first hello packet
@@ -94,7 +91,9 @@ async fn handle_ws_message(
             conn.recv_json(&msg)?;
 
             for event in conn.events() {
-                tokio::spawn(handle_event(event, Arc::clone(rest)));
+                if let Ok(event) = DispatchEvent::try_from(event) {
+                    tokio::spawn(handle_event(event, Arc::clone(rest)));
+                }
             }
         }
         msg => {
@@ -118,11 +117,15 @@ where
     Ok(socket)
 }
 
-async fn handle_event(event: Event, rest: Arc<Client>) {
-    if let Event::MessageCreate(msg) = event {
+async fn handle_event(event: DispatchEvent, rest: Arc<Client>) {
+    if let DispatchEvent::MessageCreate(msg) = event {
         if msg.content.contains("ping") {
-            let params = CreateMessageParams::default().content("Pong");
-            rest.create_message(msg.channel_id, params).await.unwrap();
+            rest.create_message(msg.channel_id)
+                .content("Pong")
+                .unwrap()
+                .exec()
+                .await
+                .unwrap();
         }
     }
 }

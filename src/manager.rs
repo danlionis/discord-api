@@ -10,7 +10,7 @@
 //! let mut manager = discord::manager::connect(token).await?;
 //!
 //! while let Ok(event) = manager.recv().await {
-//!     println!("received event: {}", event.kind());
+//!     println!("received event: {:?}", event.kind());
 //! }
 //! # Ok(())
 //! # }
@@ -55,7 +55,7 @@ where
     let mut conn = Connection::new(token.clone());
 
     let url = {
-        let mut info = rest.gateway().exec().await?.model().await.unwrap();
+        let mut info = rest.gateway().authed().exec().await?.model().await.unwrap();
         info.url.push_str("/?v=9");
         info.url
     };
@@ -83,32 +83,6 @@ where
 ///
 /// This manager uses the [tokio_tungstenite](https://docs.rs/tokio-tungstenite) crate for
 /// websockets and the included [`Client`](Client) as REST client.
-///
-/// # Example
-/// ```no_run
-/// # use std::sync::Arc;
-/// # use discord::{model::gateway::Event, Error};
-/// #[tokio::main]
-/// async fn main() -> Result<(), Error> {
-///     let mut manager = discord::manager::connect("YOUR_TOKEN").await?;
-///
-///     while let Ok(event) = manager.recv().await {
-///         if let Event::MessageCreate(msg) = event {
-///             let rest = Arc::clone(manager.rest());
-///
-///             // spawn new task to not block recv loop
-///             tokio::spawn(async move {
-///                 // react with 😀
-///                 let _ = rest
-///                     .create_reaction(msg.channel_id, msg.id, "%F0%9F%98%80".to_owned())
-///                     .await;
-///             });
-///         }
-///     }
-///
-///     Ok(())
-/// }
-/// ```
 pub struct Manager {
     conn: Connection,
     socket: WebSocketStream<MaybeTlsStream<TcpStream>>,

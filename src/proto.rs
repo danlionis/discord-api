@@ -22,7 +22,7 @@
 //!
 //! ```no_run
 //! # use discord::proto::Connection;
-//! # use discord::model::gateway::GatewayEvent;
+//! # use twilight_model::gateway::event::GatewayEvent;
 //! # fn recv_from_socket() -> GatewayEvent { unimplemented!() };
 //! # let mut conn = Connection::new("TOKEN");
 //! let event = recv_from_socket();
@@ -37,8 +37,7 @@
 //! - [`send()`] creates a single command
 //!
 //! ```no_run
-//! # use discord::proto::Connection;
-//! # use discord::model::gateway::GatewayCommand;
+//! # use discord::proto::{Connection, GatewayCommand};
 //! # fn send_to_socket(cmd: GatewayCommand) { unimplemented!() };
 //! # let mut conn = Connection::new("TOKEN");
 //! for cmd in conn.send_iter() {
@@ -70,7 +69,6 @@ use twilight_model::gateway::{
 };
 
 use crate::error::CloseCode;
-// model::gateway::{Event, GatewayCommand, GatewayEvent, Identify, Resume},
 use std::collections::VecDeque;
 
 #[allow(missing_docs)]
@@ -179,10 +177,11 @@ impl Connection {
     ///
     /// # Example
     /// ```
-    /// # use discord::{proto::Connection, model::gateway::GatewayCommand};
+    /// # use discord::proto::{Connection, GatewayCommand};
+    /// # use twilight_model::gateway::payload::outgoing::Heartbeat;
     /// # let mut conn = Connection::new("");
     /// conn.queue_heartbeat();
-    /// assert_eq!(Some(GatewayCommand::Heartbeat(0)), conn.send());
+    /// assert_eq!(Some(GatewayCommand::Heartbeat(Heartbeat::new(0))), conn.send());
     /// ```
     pub fn queue_heartbeat(&mut self) {
         self.send_queue
@@ -295,7 +294,7 @@ impl Connection {
             }
         }
 
-        if let GatewayEvent::Dispatch(_seq, event) = &event {
+        if let GatewayEvent::Dispatch(seq, event) = event {
             match event.as_ref() {
                 DispatchEvent::Ready(ready) => {
                     log::info!(
@@ -316,10 +315,6 @@ impl Connection {
                 }
                 _ => {}
             }
-        }
-
-        // forward all dispatch events, no matter the state
-        if let GatewayEvent::Dispatch(seq, event) = event {
             log::debug!("recv dispatch: kind= {:?} seq= {}", event.kind(), seq);
 
             self.seq = seq;
@@ -347,8 +342,7 @@ impl Connection {
     ///
     /// # Example
     /// ```no_run
-    /// # use discord::proto::Connection;
-    /// # use discord::model::gateway::GatewayCommand;
+    /// # use discord::proto::{Connection, GatewayCommand};
     /// # fn send_to_socket(cmd: GatewayCommand) { unimplemented!() };
     /// # let mut conn = Connection::new("token");
     /// for cmd in conn.send_iter() {
@@ -375,8 +369,7 @@ impl Connection {
     ///
     /// # Example
     /// ```
-    /// # use discord::proto::Connection;
-    /// # use discord::model::gateway::GatewayCommand;
+    /// # use discord::proto::{Connection, GatewayCommand};
     /// # fn send_to_socket(cmd: GatewayCommand) { unimplemented!() };
     /// # let mut conn = Connection::new("token");
     /// while let Some(cmd) = conn.send() {
@@ -435,28 +428,48 @@ impl Connection {
 
 #[cfg(test)]
 mod tests {
-    use crate::model::{
-        gateway::{Hello, Ready},
-        User,
+    use twilight_model::{
+        gateway::payload::incoming::Ready,
+        id::Id,
+        oauth::{current_application_info::ApplicationFlags, PartialApplication},
+        user::CurrentUser,
     };
 
     use super::*;
 
-    fn create_default_user() -> User {
-        User {
-            id: 0.into(),
-            username: "username".into(),
-            discriminator: "0000".into(),
+    fn create_default_ready() -> GatewayEvent {
+        GatewayEvent::Dispatch(
+            0,
+            Box::new(DispatchEvent::Ready(Box::new(Ready {
+                guilds: Vec::new(),
+                version: 0,
+                application: PartialApplication {
+                    flags: ApplicationFlags::empty(),
+                    id: Id::new(1),
+                },
+                user: create_default_user(),
+                session_id: "session_id".into(),
+                shard: Some([0, 1]),
+            }))),
+        )
+    }
+
+    fn create_default_user() -> CurrentUser {
+        CurrentUser {
+            id: Id::new(1),
+            name: "username".into(),
+            discriminator: 0000,
             avatar: None,
             bot: true,
-            system: false,
             mfa_enabled: false,
             locale: None,
-            verified: false,
+            verified: None,
             email: None,
-            premium_type: 0,
-            public_flags: 0,
-            flags: 0,
+            premium_type: None,
+            public_flags: None,
+            flags: None,
+            accent_color: None,
+            banner: None,
         }
     }
 
@@ -466,9 +479,7 @@ mod tests {
         let mut conn = Connection::new(token);
         assert_eq!(State::Closed, *conn.state());
 
-        let hello = GatewayEvent::Hello(Hello {
-            heartbeat_interval: 10,
-        });
+        let hello = GatewayEvent::Hello(10);
         conn.recv(hello);
         assert_eq!(State::Identify, *conn.state());
 
@@ -479,19 +490,10 @@ mod tests {
             panic!("excpeted GatewayCommand::Identify, got {:?}", identify);
         };
 
-        assert_eq!(token, &identify.token);
-        assert_eq!((0, 1), identify.shard);
+        assert_eq!(token, &identify.d.token);
+        assert_eq!(Some([0, 1]), identify.d.shard);
 
-        let ready = GatewayEvent::Dispatch(
-            0,
-            Event::Ready(Ready {
-                version: 0,
-                user: create_default_user(),
-                session_id: "session_id".into(),
-                shard: Some((0, 1)),
-            }),
-        );
-
+        let ready = create_default_ready();
         conn.recv(ready);
         assert_eq!(State::Ready, *conn.state());
     }
@@ -500,47 +502,28 @@ mod tests {
     fn test_resume() {
         let token = "TOKEN";
         let mut conn = Connection::new(token);
-        let session_id = "session_id".to_string();
+        let _session_id = "session_id".to_string();
         assert_eq!(State::Closed, *conn.state());
 
-        let hello = GatewayEvent::Hello(Hello {
-            heartbeat_interval: 10,
-        });
+        let hello = GatewayEvent::Hello(10);
         conn.recv(hello);
         assert_eq!(State::Identify, *conn.state());
         assert_eq!(10, conn.heartbeat_interval());
 
         let _identify = conn.send().unwrap();
 
-        let ready = GatewayEvent::Dispatch(
-            0,
-            Event::Ready(Ready {
-                version: 0,
-                user: create_default_user(),
-                session_id: session_id.clone(),
-                shard: Some((0, 1)),
-            }),
-        );
+        let ready = create_default_ready();
         conn.recv(ready);
         assert_eq!(State::Ready, *conn.state());
 
         // simulate socket reconnect
-        let hello = GatewayEvent::Hello(Hello {
-            heartbeat_interval: 15,
-        });
+        let hello = GatewayEvent::Hello(15);
         conn.recv(hello);
         assert_eq!(State::Replaying, *conn.state());
         assert_eq!(15, conn.heartbeat_interval());
 
-        conn.recv(GatewayEvent::Dispatch(
-            0,
-            Event::Ready(Ready {
-                version: 0,
-                user: create_default_user(),
-                session_id: "session_id".into(),
-                shard: Some((0, 1)),
-            }),
-        ));
+        let ready = create_default_ready();
+        conn.recv(ready);
         assert_eq!(State::Ready, *conn.state());
     }
 
@@ -549,11 +532,11 @@ mod tests {
         let mut conn = Connection::new("TOKEN");
         assert_eq!(State::Closed, *conn.state());
 
-        conn.recv(GatewayEvent::InvalidSession(true));
+        conn.recv(GatewayEvent::InvalidateSession(true));
         assert_eq!(State::Resume, *conn.state());
         assert!(conn.should_reconnect());
 
-        conn.recv(GatewayEvent::InvalidSession(false));
+        conn.recv(GatewayEvent::InvalidateSession(false));
         assert_eq!(State::Reconnect, *conn.state());
         assert!(conn.should_reconnect());
 
@@ -567,8 +550,11 @@ mod tests {
         let mut conn = Connection::new("TOKEN");
         assert_eq!(State::Closed, *conn.state());
 
-        conn.recv(GatewayEvent::Heartbeat(0));
+        conn.recv(GatewayEvent::Heartbeat(1));
 
-        assert_eq!(Some(GatewayCommand::Heartbeat(0)), conn.send());
+        assert_eq!(
+            Some(GatewayCommand::Heartbeat(Heartbeat::new(0))),
+            conn.send()
+        );
     }
 }

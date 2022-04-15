@@ -10,8 +10,6 @@
 #[allow(dead_code)]
 pub(crate) const LIB_NAME: &str = "discord-api";
 
-#[cfg(feature = "cache")]
-pub mod cache;
 pub mod error;
 #[cfg(feature = "manager")]
 pub mod manager;
