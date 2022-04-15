@@ -5,9 +5,12 @@
 //! # Example
 //!
 //! ```no_run
+//! # use twilight_model::gateway::Intents;
+//! # use discord::proto::*;
 //! # async fn run() -> Result<(), discord::Error> {
 //! # let token = "";
-//! let mut manager = discord::manager::connect(token).await?;
+//! let config = Config::new(token, Intents::all());
+//! let mut manager = discord::manager::connect(config).await?;
 //!
 //! while let Ok(event) = manager.recv().await {
 //!     println!("received event: {:?}", event.kind());
@@ -16,7 +19,10 @@
 //! # }
 //! ```
 
-use crate::{proto::Connection, Error};
+use crate::{
+    proto::{Config, GatewayContext},
+    Error, API_VERSION,
+};
 use futures::{sink::SinkExt, stream::StreamExt};
 use std::{fmt::Debug, ops::Deref, sync::Arc, time::Duration};
 use tokio::{net::TcpStream, time::Interval};
@@ -46,35 +52,33 @@ use ws::{
 /// See [module docs][self]
 ///
 /// [`recv()`]: Manager::recv
-pub async fn connect<S>(token: S) -> Result<Manager, Error>
-where
-    S: Into<String>,
-{
-    let token: String = token.into();
+pub async fn connect(config: Config) -> Result<Manager, Error> {
+    let token = config.token.clone();
     let rest = Client::new(token.clone());
-    let mut conn = Connection::new(token.clone());
+    let mut ctx = GatewayContext::new(config);
 
-    let url = {
+    let info = {
         let mut info = rest.gateway().authed().exec().await?.model().await.unwrap();
-        info.url.push_str("/?v=9");
-        info.url
+        info.url.push_str("/?v=");
+        info.url.push_str(&API_VERSION.to_string());
+        info
     };
 
-    let (mut socket, _) = ws::connect_async(&url).await.unwrap();
+    let (mut socket, _) = ws::connect_async(&info.url).await.unwrap();
 
     // init connection
     let hello = socket.next().await.unwrap()?;
     let hello = hello.to_text()?;
-    conn.recv_json(hello).unwrap();
+    ctx.recv_json(hello).unwrap();
 
-    let interval = tokio::time::interval(Duration::from_millis(conn.heartbeat_interval()));
+    let interval = tokio::time::interval(Duration::from_millis(ctx.heartbeat_interval()));
 
     Ok(Manager {
-        conn,
+        ctx,
         socket,
         rest: Arc::new(rest),
         token,
-        url,
+        url: info.url,
         interval,
     })
 }
@@ -84,7 +88,7 @@ where
 /// This manager uses the [tokio_tungstenite](https://docs.rs/tokio-tungstenite) crate for
 /// websockets and the included [`Client`](Client) as REST client.
 pub struct Manager {
-    conn: Connection,
+    ctx: GatewayContext,
     socket: WebSocketStream<MaybeTlsStream<TcpStream>>,
     rest: Arc<Client>,
     token: String,
@@ -95,7 +99,7 @@ pub struct Manager {
 impl Debug for Manager {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Manager")
-            .field("conn", &self.conn)
+            .field("conn", &self.ctx)
             // .field("socket", &self.socket)
             .field("rest", &self.rest)
             .field("token", &self.token)
@@ -114,22 +118,22 @@ impl Manager {
     /// Receive an event from the gateway
     pub async fn recv(&mut self) -> Result<Event, Error> {
         loop {
-            if let Some(event) = self.conn.event() {
+            if let Some(event) = self.ctx.event() {
                 log::trace!("passing event to receiver: {:?}", event);
                 return Ok(event);
             }
 
-            if let Some(code) = self.conn.failed() {
+            if let Some(code) = self.ctx.failed() {
                 return Err(code.into());
             }
 
-            if self.conn.should_reconnect() {
+            if self.ctx.should_reconnect() {
                 self.reconnect_socket().await?;
             }
 
             tokio::select! {
                 _ = self.interval.tick() => {
-                    self.conn.queue_heartbeat();
+                    self.ctx.queue_heartbeat();
                 }
                 ws_msg = self.socket.next() => {
                     match ws_msg {
@@ -149,7 +153,7 @@ impl Manager {
             }
 
             // iterate through all packets generated and send them to the gateway
-            for s in self.conn.send_iter_json() {
+            for s in self.ctx.send_iter_json() {
                 log::debug!("sending: {}", s);
                 self.socket
                     .feed(Message::Text(s))
@@ -164,10 +168,10 @@ impl Manager {
         match msg {
             Message::Close(Some(CloseFrame { code, reason })) => {
                 log::debug!("conn closed: code= {} reason= {}", code, reason);
-                self.conn.recv_close_code(code);
+                self.ctx.recv_close_code(code);
             }
             Message::Text(msg) => {
-                self.conn.recv_json(&msg)?;
+                self.ctx.recv_json(&msg)?;
             }
             msg => {
                 log::warn!("ignoring unexpected message: {:?}", msg);

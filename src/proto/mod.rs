@@ -7,12 +7,13 @@
 //! as well as the event loop
 //!
 //! # Connection
+//! Create a context with all intents.
 //! ```no_run
-//! # use discord::proto::Connection;
-//! # let TOKEN = "--your-token--";
-//! let conn = Connection::new(TOKEN);
+//! # use discord::proto::{GatewayContext, Config};
+//! # use twilight_model::gateway::Intents;
+//! let mut conn = GatewayContext::new(Config::new("TOKEN", Intents::all()));
 //! ```
-//! At this point the [Connection] is still in the `Closed` state.
+//! At this point the [GatewayContext] is still in the `Closed` state.
 //! As soon as the connection receives the correct `Hello` message from the gateway it will
 //! automatically initialize the connection.
 //!
@@ -21,10 +22,10 @@
 //! connection updates it's state
 //!
 //! ```no_run
-//! # use discord::proto::Connection;
-//! # use twilight_model::gateway::event::GatewayEvent;
+//! # use discord::proto::{GatewayContext, Config};
+//! # use twilight_model::gateway::{Intents, event::GatewayEvent};
 //! # fn recv_from_socket() -> GatewayEvent { unimplemented!() };
-//! # let mut conn = Connection::new("TOKEN");
+//! # let mut conn = GatewayContext::new(Config::new("TOKEN", Intents::empty()));
 //! let event = recv_from_socket();
 //!
 //! conn.recv(event);
@@ -37,9 +38,10 @@
 //! - [`send()`] creates a single command
 //!
 //! ```no_run
-//! # use discord::proto::{Connection, GatewayCommand};
+//! # use discord::proto::{GatewayContext, GatewayCommand, Config};
+//! # use twilight_model::gateway::Intents;
 //! # fn send_to_socket(cmd: GatewayCommand) { unimplemented!() };
-//! # let mut conn = Connection::new("TOKEN");
+//! # let mut conn = GatewayContext::new(Config::new("TOKEN", Intents::empty()));
 //! for cmd in conn.send_iter() {
 //!     send_to_socket(cmd);
 //! }
@@ -53,23 +55,24 @@
 //! commands
 //!
 //!
-//! [`recv()`]: Connection::recv
-//! [`recv_json()`]: Connection::recv_json
-//! [`send_iter()`]: Connection::send_iter
-//! [`send()`]: Connection::send
+//! [`recv()`]: GatewayContext::recv
+//! [`recv_json()`]: GatewayContext::recv_json
+//! [`send_iter()`]: GatewayContext::send_iter
+//! [`send()`]: GatewayContext::send
 
+use crate::{error::CloseCode, LIB_NAME};
 use serde::Serialize;
+use std::collections::VecDeque;
 use twilight_model::gateway::{
     event::{DispatchEvent, Event, GatewayEvent},
     payload::outgoing::{
         identify::{IdentifyInfo, IdentifyProperties},
         Heartbeat, Identify, RequestGuildMembers, Resume, UpdatePresence, UpdateVoiceState,
     },
-    Intents,
 };
 
-use crate::error::CloseCode;
-use std::collections::VecDeque;
+mod config;
+pub use config::*;
 
 #[allow(missing_docs)]
 #[derive(Debug, PartialEq, Eq, Serialize)]
@@ -87,11 +90,9 @@ const RECV_QUEUE_SIZE: usize = 1;
 const SEND_QUEUE_SIZE: usize = 1;
 
 /// Discord gateway connection handler to
-///
-/// TODO: maybe rename to GatewayContext
 #[derive(Debug)]
-pub struct Connection {
-    token: String,
+pub struct GatewayContext {
+    config: Config,
     /// sequence number
     seq: u64,
     session_id: String,
@@ -125,7 +126,7 @@ pub enum State {
     Failed(CloseCode),
 }
 
-impl Connection {
+impl GatewayContext {
     /// Add a command to the send queue
     pub fn enqueue_command(&mut self, cmd: GatewayCommand) {
         self.send_queue.push_back(cmd);
@@ -137,7 +138,7 @@ impl Connection {
     }
 
     /// Create an iterator of all the events received from the gateway
-    pub fn events<'a>(&'a mut self) -> impl Iterator<Item = Event> + 'a {
+    pub fn events(&mut self) -> impl Iterator<Item = Event> + '_ {
         self.recv_queue.drain(..)
     }
 
@@ -156,13 +157,10 @@ impl Connection {
         self.heartbeat_interval
     }
 
-    /// Create a new connection to the discord gateway
-    pub fn new<S>(token: S) -> Self
-    where
-        S: Into<String>,
-    {
-        Connection {
-            token: token.into(),
+    /// Create a new GatewayContext to the discord gateway
+    pub fn new(config: Config) -> Self {
+        GatewayContext {
+            config,
             seq: 0,
             heartbeat_interval: 0,
             recv_queue: VecDeque::with_capacity(RECV_QUEUE_SIZE),
@@ -177,9 +175,9 @@ impl Connection {
     ///
     /// # Example
     /// ```
-    /// # use discord::proto::{Connection, GatewayCommand};
-    /// # use twilight_model::gateway::payload::outgoing::Heartbeat;
-    /// # let mut conn = Connection::new("");
+    /// # use discord::proto::*;
+    /// # use twilight_model::gateway::{Intents, payload::outgoing::Heartbeat};
+    /// # let mut conn = GatewayContext::new(Config::new("TOKEN", Intents::empty()));
     /// conn.queue_heartbeat();
     /// assert_eq!(Some(GatewayCommand::Heartbeat(Heartbeat::new(0))), conn.send());
     /// ```
@@ -192,8 +190,9 @@ impl Connection {
     ///
     /// # Example
     /// ```
-    /// # use discord::{proto::Connection, error::CloseCode};
-    /// # let mut conn = Connection::new("");
+    /// # use discord::{proto::{GatewayContext, Config}, error::CloseCode};
+    /// # use twilight_model::gateway::Intents;
+    /// # let mut conn = GatewayContext::new(Config::new("TOKEN", Intents::empty()));
     /// // connection closed normally
     /// conn.recv_close_code(1000u16);
     /// assert!(conn.should_reconnect());
@@ -226,99 +225,92 @@ impl Connection {
         // we've received an event so the socket can't be closed
         self.socket_closed = false;
 
-        // an invalid session can potentially be resumed
-        if let GatewayEvent::InvalidateSession(resumable) = event {
-            self.state = if resumable {
-                State::Resume
-            } else {
-                State::Reconnect
-            };
-            return;
-        }
+        match event {
+            // an invalid session can potentially be resumed
+            GatewayEvent::InvalidateSession(resumable) => {
+                self.state = if resumable {
+                    State::Resume
+                } else {
+                    State::Reconnect
+                };
+            }
+            // a reconnect event can be resumed after the socket has reconnected to the gateway
+            GatewayEvent::Reconnect => {
+                self.state = State::Resume;
+            }
+            // queue a heartbeat if it was requested
+            GatewayEvent::Heartbeat(_) => {
+                self.queue_heartbeat();
+            }
+            // do nothing if hearbeat was ack'd
+            GatewayEvent::HeartbeatAck => {
+                // TODO: maybe keep track if the heartbeat was ack'd and if not send it again
+            }
+            // hello events indicate that the underlying socket has (re)connected to the gateway
+            GatewayEvent::Hello(heartbeat_interval) => {
+                log::debug!("recv hello: heartbeat_interval= {}", heartbeat_interval);
 
-        // a reconnect event can be resumed after the socket has reconnected to the gateway
-        if let GatewayEvent::Reconnect = event {
-            self.state = State::Resume;
-            return;
-        }
+                self.heartbeat_interval = heartbeat_interval;
 
-        // queue a heartbeat if it was requested
-        if let GatewayEvent::Heartbeat(_) = event {
-            self.queue_heartbeat();
-            return;
-        }
-
-        // do nothing if hearbeat was ack'd
-        if let GatewayEvent::HeartbeatAck = event {
-            // TODO: maybe keep track if the heartbeat was ack'd and if not send it again
-            return;
-        }
-
-        // hello events indicate that the underlying socket has (re)connected to the gateway
-        if let GatewayEvent::Hello(heartbeat_interval) = event {
-            log::debug!("recv hello: heartbeat_interval= {}", heartbeat_interval);
-
-            self.heartbeat_interval = heartbeat_interval;
-
-            self.state = match self.state {
-                // if the connection was ready we try to resume first
-                State::Resume | State::Ready => {
-                    self.send_queue
-                        .push_back(GatewayCommand::Resume(Resume::new(
-                            self.seq,
-                            self.session_id.clone(),
-                            self.token.clone(),
-                        )));
-                    State::Replaying
-                }
-                // client got reconnected
-                _ => {
-                    self.send_queue
-                        .push_back(GatewayCommand::Identify(Identify::new(IdentifyInfo {
-                            compress: false,
-                            token: self.token.clone(),
-                            shard: Some([0, 1]),
-                            intents: Intents::all(),
-                            large_threshold: 100000,
-                            presence: None,
-                            properties: IdentifyProperties::new(
-                                "twilight.rs",
-                                "twilight.rs",
-                                "OS",
-                                "",
-                                "",
-                            ),
-                        })));
-                    State::Identify
+                self.state = match self.state {
+                    // if the connection was ready we try to resume first
+                    State::Resume | State::Ready => {
+                        self.send_queue
+                            .push_back(GatewayCommand::Resume(Resume::new(
+                                self.seq,
+                                self.session_id.clone(),
+                                self.config.token.clone(),
+                            )));
+                        State::Replaying
+                    }
+                    // client got reconnected
+                    _ => {
+                        self.send_queue
+                            .push_back(GatewayCommand::Identify(Identify::new(IdentifyInfo {
+                                compress: false,
+                                token: self.config.token.clone(),
+                                shard: Some(self.config.shard),
+                                intents: self.config.intents,
+                                large_threshold: 100000,
+                                presence: self.config.presence.clone(),
+                                properties: IdentifyProperties::new(
+                                    LIB_NAME,
+                                    LIB_NAME,
+                                    std::env::consts::OS,
+                                    "",
+                                    "",
+                                ),
+                            })));
+                        State::Identify
+                    }
                 }
             }
-        }
+            GatewayEvent::Dispatch(seq, event) => {
+                match event.as_ref() {
+                    DispatchEvent::Ready(ready) => {
+                        log::info!(
+                            "client ready: version= {} session_id= {} tag= {}#{} shard= {:?}",
+                            ready.version,
+                            ready.session_id,
+                            ready.user.name,
+                            ready.user.discriminator(),
+                            ready.shard
+                        );
 
-        if let GatewayEvent::Dispatch(seq, event) = event {
-            match event.as_ref() {
-                DispatchEvent::Ready(ready) => {
-                    log::info!(
-                        "client ready: version= {} session_id= {} tag= {}#{} shard= {:?}",
-                        ready.version,
-                        ready.session_id,
-                        ready.user.name,
-                        ready.user.discriminator(),
-                        ready.shard
-                    );
+                        self.session_id = ready.session_id.clone();
+                        self.state = State::Ready;
+                    }
+                    DispatchEvent::Resumed => {
+                        log::info!("resumed: session_id= {}", self.session_id);
+                        self.state = State::Ready;
+                    }
+                    _ => {}
+                }
+                log::debug!("recv dispatch: kind= {:?} seq= {}", event.kind(), seq);
 
-                    self.session_id = ready.session_id.clone();
-                    self.state = State::Ready;
-                }
-                DispatchEvent::Resumed => {
-                    log::info!("resumed: session_id= {}", self.session_id);
-                    self.state = State::Ready;
-                }
-                _ => {}
+                self.seq = seq;
+                self.recv_queue.push_back((*event).into());
             }
-            log::debug!("recv dispatch: kind= {:?} seq= {}", event.kind(), seq);
-
-            self.seq = seq;
-            self.recv_queue.push_back((*event).into());
         }
     }
 
@@ -342,14 +334,15 @@ impl Connection {
     ///
     /// # Example
     /// ```no_run
-    /// # use discord::proto::{Connection, GatewayCommand};
+    /// # use discord::proto::{GatewayContext, GatewayCommand, Config};
+    /// # use twilight_model::gateway::Intents;
     /// # fn send_to_socket(cmd: GatewayCommand) { unimplemented!() };
-    /// # let mut conn = Connection::new("token");
+    /// # let mut conn = GatewayContext::new(Config::new("TOKEN", Intents::empty()));
     /// for cmd in conn.send_iter() {
     ///     send_to_socket(cmd);
     /// }
     /// ```
-    pub fn send_iter<'a>(&'a mut self) -> impl Iterator<Item = GatewayCommand> + 'a {
+    pub fn send_iter(&mut self) -> impl Iterator<Item = GatewayCommand> + '_ {
         log::trace!("sending commands {:?}", self.send_queue);
         self.send_queue.drain(..)
     }
@@ -358,7 +351,7 @@ impl Connection {
     ///
     /// The commands will already be serialized in JSON.
     #[cfg(feature = "json")]
-    pub fn send_iter_json<'a>(&'a mut self) -> impl Iterator<Item = String> + 'a {
+    pub fn send_iter_json(&mut self) -> impl Iterator<Item = String> + '_ {
         self.send_iter()
             .map(|cmd| serde_json::to_string(&cmd).unwrap())
     }
@@ -369,9 +362,10 @@ impl Connection {
     ///
     /// # Example
     /// ```
-    /// # use discord::proto::{Connection, GatewayCommand};
+    /// # use discord::proto::{GatewayContext, GatewayCommand, Config};
+    /// # use twilight_model::gateway::Intents;
     /// # fn send_to_socket(cmd: GatewayCommand) { unimplemented!() };
-    /// # let mut conn = Connection::new("token");
+    /// # let mut conn = GatewayContext::new(Config::new("TOKEN", Intents::empty()));
     /// while let Some(cmd) = conn.send() {
     ///     send_to_socket(cmd);
     /// }
@@ -389,7 +383,7 @@ impl Connection {
     /// # Example
     /// see [send]
     ///
-    /// [send]: Connection::send
+    /// [send]: GatewayContext::send
     #[cfg(feature = "json")]
     pub fn send_json(&mut self) -> Option<String> {
         self.send().map(|cmd| serde_json::to_string(&cmd).unwrap())
@@ -411,10 +405,7 @@ impl Connection {
 
     /// Returns true if the connection is closed
     pub fn is_closed(&self) -> bool {
-        match self.state {
-            State::Closed | State::Reconnect | State::Resume => true,
-            _ => false,
-        }
+        matches!(self.state, State::Closed | State::Reconnect | State::Resume)
     }
 
     /// Returns [Some(CloseCode)] if the connection failed
@@ -429,7 +420,7 @@ impl Connection {
 #[cfg(test)]
 mod tests {
     use twilight_model::{
-        gateway::payload::incoming::Ready,
+        gateway::{payload::incoming::Ready, Intents},
         id::Id,
         oauth::{current_application_info::ApplicationFlags, PartialApplication},
         user::CurrentUser,
@@ -476,7 +467,7 @@ mod tests {
     #[test]
     fn test_connect() {
         let token = "TOKEN";
-        let mut conn = Connection::new(token);
+        let mut conn = GatewayContext::new(Config::new(token.to_string(), Intents::empty()));
         assert_eq!(State::Closed, *conn.state());
 
         let hello = GatewayEvent::Hello(10);
@@ -501,7 +492,7 @@ mod tests {
     #[test]
     fn test_resume() {
         let token = "TOKEN";
-        let mut conn = Connection::new(token);
+        let mut conn = GatewayContext::new(Config::new(token.to_string(), Intents::empty()));
         let _session_id = "session_id".to_string();
         assert_eq!(State::Closed, *conn.state());
 
@@ -529,7 +520,8 @@ mod tests {
 
     #[test]
     fn test_invalid_session() {
-        let mut conn = Connection::new("TOKEN");
+        let token = "TOKEN";
+        let mut conn = GatewayContext::new(Config::new(token.to_string(), Intents::empty()));
         assert_eq!(State::Closed, *conn.state());
 
         conn.recv(GatewayEvent::InvalidateSession(true));
@@ -547,7 +539,8 @@ mod tests {
 
     #[test]
     fn test_heartbeat_request() {
-        let mut conn = Connection::new("TOKEN");
+        let token = "TOKEN";
+        let mut conn = GatewayContext::new(Config::new(token.to_string(), Intents::empty()));
         assert_eq!(State::Closed, *conn.state());
 
         conn.recv(GatewayEvent::Heartbeat(1));

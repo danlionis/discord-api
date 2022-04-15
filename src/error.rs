@@ -13,8 +13,6 @@ pub enum Error {
     /// Reqwest error
     #[cfg(feature = "rest")]
     HttpError(HttpError),
-    // /// Api Error
-    // ApiError(ApiError),
     /// Serde parse error
     #[cfg(feature = "json")]
     ParseError(serde_json::Error),
@@ -31,11 +29,10 @@ impl Display for Error {
             Error::WebSocketError(err) => Display::fmt(err, f),
             #[cfg(feature = "rest")]
             Error::HttpError(err) => Display::fmt(err, f),
-            // Error::ApiError(err) => Display::fmt(err, f),
             #[cfg(feature = "json")]
             Error::ParseError(err) => Display::fmt(err, f),
-            Error::GatewayClosed(err) => write!(f, "GatewayClosed({:?}", err),
-            Error::Custom(err) => f.write_str(&err),
+            Error::GatewayClosed(err) => write!(f, "GatewayClosed({:?})", err),
+            Error::Custom(err) => f.write_str(err),
         }
     }
 }
@@ -48,12 +45,6 @@ impl From<serde_json::Error> for Error {
         Self::ParseError(err)
     }
 }
-
-// impl From<ApiError> for Error {
-//     fn from(err: ApiError) -> Self {
-//         Self::ApiError(err)
-//     }
-// }
 
 impl From<CloseCode> for Error {
     fn from(code: CloseCode) -> Self {

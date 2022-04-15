@@ -1,4 +1,7 @@
-use discord::{proto::Connection, Error};
+use discord::{
+    proto::{Config, GatewayContext},
+    Error, API_VERSION,
+};
 use futures::{sink::SinkExt, stream::StreamExt};
 use std::{convert::TryFrom, sync::Arc, time::Duration};
 use tokio::{
@@ -7,7 +10,7 @@ use tokio::{
 };
 use tokio_tungstenite as ws;
 use twilight_http::Client;
-use twilight_model::gateway::event::DispatchEvent;
+use twilight_model::gateway::{event::DispatchEvent, Intents};
 use ws::{
     tungstenite::{protocol::CloseFrame, Message},
     MaybeTlsStream, WebSocketStream,
@@ -23,14 +26,17 @@ async fn main() -> Result<(), Error> {
     let rest = Arc::new(Client::new(token.to_string()));
 
     // connect to websocket
-    let mut info = rest.gateway().authed().exec().await?.model().await.unwrap();
-    log::debug!("gateway: {:?}", info);
-    info.url.push_str("/?v=9");
-    let url = info.url.as_str();
-    let (mut socket, _) = ws::connect_async(url).await?;
+    let info = {
+        let mut info = rest.gateway().authed().exec().await?.model().await.unwrap();
+        info.url.push_str("/?v=");
+        info.url.push_str(&API_VERSION.to_string());
+        info
+    };
+    let (mut socket, _) = ws::connect_async(&info.url).await?;
 
     // initialize connection and receive first hello packet
-    let mut conn = Connection::new(token);
+    let config = Config::new(token, Intents::GUILD_MESSAGES);
+    let mut conn = GatewayContext::new(config);
     let hello = socket.next().await.unwrap()?;
     let hello = hello.to_text()?;
     conn.recv_json(hello)?;
@@ -41,7 +47,7 @@ async fn main() -> Result<(), Error> {
     loop {
         // reconnect the websocket if requested
         if conn.should_reconnect() {
-            socket = reconnect_socket(socket, url).await?;
+            socket = reconnect_socket(socket, &info.url).await?;
         }
 
         if let Some(code) = conn.failed() {
@@ -59,7 +65,7 @@ async fn main() -> Result<(), Error> {
                     }
                     _ => {
                         log::info!("an error occured, closing connection and reconnecting");
-                        socket = reconnect_socket( socket, url).await?;
+                        socket = reconnect_socket(socket, &info.url).await?;
                     }
                 }
             }
@@ -77,7 +83,7 @@ async fn main() -> Result<(), Error> {
 
 async fn handle_ws_message(
     msg: ws::tungstenite::Message,
-    conn: &mut Connection,
+    conn: &mut GatewayContext,
     rest: &Arc<Client>,
 ) -> Result<(), Error> {
     match msg {

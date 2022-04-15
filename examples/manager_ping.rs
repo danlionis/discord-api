@@ -1,15 +1,34 @@
-use discord::Error;
+use discord::{proto::Config, Error};
 use std::{convert::TryFrom, sync::Arc};
 use twilight_http::{request::channel::reaction::RequestReactionType, Client};
-use twilight_model::gateway::event::DispatchEvent;
+use twilight_model::gateway::{
+    event::DispatchEvent,
+    payload::outgoing::update_presence::UpdatePresencePayload,
+    presence::{ActivityType, MinimalActivity, Status},
+    Intents,
+};
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
-    let token = std::env::var("TOKEN").expect("missing token");
+    let token = std::env::var("TOKEN").expect("missing TOKEN env variable");
 
     env_logger::init();
 
-    let mut manager = discord::manager::connect(token).await?;
+    let config = Config::new(token, Intents::GUILD_MESSAGES).presence(
+        UpdatePresencePayload::new(
+            vec![MinimalActivity {
+                kind: ActivityType::Playing,
+                name: "Hello World".to_string(),
+                url: None,
+            }
+            .into()],
+            false,
+            None,
+            Status::Online,
+        )
+        .unwrap(),
+    );
+    let mut manager = discord::manager::connect(config).await?;
 
     while let Ok(event) = manager.recv().await {
         if let Ok(event) = DispatchEvent::try_from(event) {

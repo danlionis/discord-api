@@ -10,13 +10,13 @@
 #[allow(dead_code)]
 pub(crate) const LIB_NAME: &str = "discord-api";
 
+/// Gateway Api version
+pub const API_VERSION: u16 = 9;
+
 pub mod error;
 #[cfg(feature = "manager")]
 pub mod manager;
 pub mod proto;
-pub mod util;
-
-mod snowflake;
 
 pub use error::Error;
-pub use snowflake::Snowflake;
+pub use twilight_model as model;
