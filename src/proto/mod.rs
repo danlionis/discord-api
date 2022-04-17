@@ -11,7 +11,7 @@
 //! ```no_run
 //! # use discord::proto::{GatewayContext, Config};
 //! # use twilight_model::gateway::Intents;
-//! let mut conn = GatewayContext::new(Config::new("TOKEN", Intents::all()));
+//! let mut conn = GatewayContext::new(Config::new("<token>", Intents::all()));
 //! ```
 //! At this point the [GatewayContext] is still in the `Closed` state.
 //! As soon as the connection receives the correct `Hello` message from the gateway it will
@@ -60,7 +60,7 @@
 //!
 //! To obtain the timer interval and queue the heartbeat message use the following methods:
 //! ```
-//! use discord::{proto::GatewayContext, model::gateway::Intents};
+//! # use discord::{proto::GatewayContext, model::gateway::Intents};
 //! # let mut ctx = GatewayContext::new(("", Intents::empty()));
 //! let heartbeat_interval = ctx.heartbeat_interval();
 //! ctx.queue_heartbeat();
@@ -72,14 +72,14 @@
 //! [`send_iter()`]: GatewayContext::send_iter
 //! [`send()`]: GatewayContext::send
 
-use crate::{error::CloseCode, LIB_NAME};
+use crate::error::CloseCode;
 use serde::Serialize;
 use std::collections::VecDeque;
 use twilight_model::gateway::{
     event::{DispatchEvent, Event, GatewayEvent},
     payload::outgoing::{
-        identify::{IdentifyInfo, IdentifyProperties},
-        Heartbeat, Identify, RequestGuildMembers, Resume, UpdatePresence, UpdateVoiceState,
+        identify::IdentifyInfo, Heartbeat, Identify, RequestGuildMembers, Resume, UpdatePresence,
+        UpdateVoiceState,
     },
 };
 
@@ -286,15 +286,9 @@ impl GatewayContext {
                                 token: self.config.token.clone(),
                                 shard: Some(self.config.shard),
                                 intents: self.config.intents,
-                                large_threshold: 100000,
+                                large_threshold: self.config.large_threshold,
                                 presence: self.config.presence.clone(),
-                                properties: IdentifyProperties::new(
-                                    LIB_NAME,
-                                    LIB_NAME,
-                                    std::env::consts::OS,
-                                    "",
-                                    "",
-                                ),
+                                properties: self.config.identify_properties.clone(),
                             })));
                         State::Identify
                     }
@@ -419,7 +413,7 @@ impl GatewayContext {
     }
 
     /// Returns true if the connection is closed
-    pub fn is_closed(&self) -> bool {
+    pub fn closed(&self) -> bool {
         matches!(self.state, State::Closed | State::Reconnect | State::Resume)
     }
 
