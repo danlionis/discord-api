@@ -140,11 +140,11 @@ impl Manager {
                             self.handle_ws_message(msg).await?;
                         }
                         Some(Err(e)) => {
-                            log::warn!("an error occured while receiving a message: {}", e);
+                            log::info!("an error occured while receiving a message: {}", e);
                             self.reconnect_socket().await?;
                         }
                         None => {
-                            log::warn!("websocket stream closed...");
+                            log::info!("websocket stream closed...");
                             self.reconnect_socket().await?;
                         }
                     }
@@ -173,14 +173,14 @@ impl Manager {
                 self.ctx.recv_json(&msg)?;
             }
             msg => {
-                log::warn!("ignoring unexpected message: {:?}", msg);
+                log::info!("ignoring unexpected message: {:?}", msg);
             }
         }
         Ok(())
     }
 
     async fn reconnect_socket(&mut self) -> Result<(), ws::tungstenite::Error> {
-        log::info!("reconnecting socket");
+        log::debug!("reconnecting socket");
         let _ = self.socket.close(None).await;
         let (socket, _) = ws::connect_async(&self.url).await?;
         self.socket = socket;
