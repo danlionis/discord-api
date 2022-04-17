@@ -16,6 +16,7 @@ tokio-tungstenite = { version = "0.13", features = ["tls"], optional = true }
 futures = { version = "0.3", optional = true }
 twilight-model = "0.10"
 twilight-http = { version = "0.10", optional = true }
+twilight-util = { version = "0.10", optional = true, features = ["builder"] }
 
 [dev-dependencies]
 env_logger = "0.9"
@@ -38,3 +39,7 @@ required-features = ["manager"]
 [[example]]
 name = "manager_ping"
 required-features = ["manager"]
+
+[[example]]
+name = "interaction"
+required-features = ["manager", "twilight-util"]
