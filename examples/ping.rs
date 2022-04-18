@@ -1,10 +1,10 @@
 use discord::{
-    model::gateway::{event::DispatchEvent, Intents},
+    model::gateway::{event::Event, Intents},
     proto::{Config, GatewayContext},
     Error, API_VERSION,
 };
 use futures::{sink::SinkExt, stream::StreamExt};
-use std::{convert::TryFrom, sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration};
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::TcpStream,
@@ -94,13 +94,8 @@ async fn handle_ws_message(
             conn.recv_close_code(code);
         }
         Message::Text(msg) => {
-            conn.recv_json(&msg)?;
-
-            for event in conn.events() {
-                if let Ok(event) = DispatchEvent::try_from(event) {
-                    tokio::spawn(handle_event(event, Arc::clone(rest)));
-                }
-            }
+            let event = conn.recv_json(&msg)?;
+            tokio::spawn(handle_event(Event::from(event), Arc::clone(rest)));
         }
         msg => {
             log::info!("ignoring message: {:?}", msg);
@@ -123,8 +118,8 @@ where
     Ok(socket)
 }
 
-async fn handle_event(event: DispatchEvent, rest: Arc<Client>) {
-    if let DispatchEvent::MessageCreate(msg) = event {
+async fn handle_event(event: Event, rest: Arc<Client>) {
+    if let Event::MessageCreate(msg) = event {
         if msg.content.contains("ping") {
             rest.create_message(msg.channel_id)
                 .content("Pong")

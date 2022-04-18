@@ -117,11 +117,6 @@ impl Manager {
     /// Receive an event from the gateway
     pub async fn recv(&mut self) -> Result<Event, Error> {
         loop {
-            if let Some(event) = self.ctx.event() {
-                log::trace!("passing event to receiver: {:?}", event);
-                return Ok(event);
-            }
-
             if let Some(code) = self.ctx.failed() {
                 return Err(code.into());
             }
@@ -137,7 +132,9 @@ impl Manager {
                 ws_msg = self.socket.next() => {
                     match ws_msg {
                         Some(Ok(msg)) => {
-                            self.handle_ws_message(msg).await?;
+                            if let Some(event) = self.handle_ws_message(msg).await? {
+                                return Ok(event);
+                            }
                         }
                         Some(Err(e)) => {
                             log::info!("an error occured while receiving a message: {}", e);
@@ -163,20 +160,25 @@ impl Manager {
         }
     }
 
-    async fn handle_ws_message(&mut self, msg: ws::tungstenite::Message) -> Result<(), Error> {
-        match msg {
+    async fn handle_ws_message(
+        &mut self,
+        msg: ws::tungstenite::Message,
+    ) -> Result<Option<Event>, Error> {
+        Ok(match msg {
             Message::Close(Some(CloseFrame { code, reason })) => {
                 log::debug!("conn closed: code= {} reason= {}", code, reason);
                 self.ctx.recv_close_code(code);
+                None
             }
             Message::Text(msg) => {
-                self.ctx.recv_json(&msg)?;
+                let event = self.ctx.recv_json(&msg)?;
+                Some(Event::from(event))
             }
             msg => {
                 log::info!("ignoring unexpected message: {:?}", msg);
+                None
             }
-        }
-        Ok(())
+        })
     }
 
     async fn reconnect_socket(&mut self) -> Result<(), ws::tungstenite::Error> {

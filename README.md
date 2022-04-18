@@ -33,9 +33,9 @@ $ cargo run --example manager_ping --all-features <token>
 The first step in establishing a connection is to create a GatewayContext object with your login token and your Intents:
 ```rust
 let config = Config::new("<token>", Intents::all());
-let conn = Connection::new(config);
+let ctx = GatewayContext::new(config);
 ```
-Since the Connection doesn't handle I/O by itself it stays in a closed state until it receives the correct packets from the gateway.
+Since the GatewayContext doesn't handle I/O by itself it stays in a closed state until it receives the correct packets from the gateway.
 
 ## Handling incoming events
 The connection processes incoming events with its `recv()` method.
@@ -45,11 +45,11 @@ loop {
     match websocket.recv() {
         Ok(gateway_event) => {
             // handle event...
-            conn.recv(gateway_event);
+            ctx.recv(gateway_event);
         },
         Err(close_code) > {
             // handle websocket closing...
-            conn.recv_close_code(close_code);
+            ctx.recv_close_code(close_code);
         }
     }
 }
@@ -59,7 +59,7 @@ loop {
 Outgoing packets are generated with the `send()` or `send_iter()` methods.
 These packets have to be sent over the websocket to the gateway.
 ```rust
-for cmd in conn.send_iter() {
+for cmd in ctx.send_iter() {
     websocket.send(cmd).unwrap();
 }
 ```
@@ -67,14 +67,11 @@ for cmd in conn.send_iter() {
 ## Heartbeating
 The application is responsible to maintain a heartbeat timer and queue the corresponding command.
 
-The heartbeat interval can be obtained after the connection is established:
+The heartbeat interval can be obtained after the connection is established and a command can be queued for sending:
 ```rust
-let heartbeat_interval = conn.heartbeat_interval();
-```
+let heartbeat_interval = ctx.heartbeat_interval();
 
-To queue a hearbeat command to be sent the next time outgoing commands are generated use:
-```rust
-conn.queue_heartbeat();
+ctx.queue_heartbeat();
 ```
 
 The exact implementation details are up to the application, but an implementation can be found in the `ping` example.
@@ -85,11 +82,11 @@ This includes for example that the gateway requested a reconnect.
 Below are listed all methods that require special handling by the application:
 
 ```rust
-if conn.should_reconnect() {
+if ctx.should_reconnect() {
     // reconnect websocket
 }
 
-if let Some(code) = conn.failed() {
+if let Some(code) = ctx.failed() {
     // handle a failed and unrecoverable connection (most likely exit the application)
 }
 ```
