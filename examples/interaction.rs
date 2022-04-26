@@ -1,22 +1,22 @@
 use discord::{
-    model::gateway::{event::DispatchEvent, Intents},
+    manager::{self, http::Client},
+    model::{
+        application::{
+            command::{BaseCommandOptionData, CommandOption},
+            component::{ActionRow, Component, TextInput},
+            interaction::Interaction,
+        },
+        gateway::{event::DispatchEvent, Intents},
+        http::interaction::InteractionResponse,
+        id::{
+            marker::{ApplicationMarker, GuildMarker},
+            Id,
+        },
+    },
     proto::Config,
     Error,
 };
 use std::{convert::TryFrom, sync::Arc};
-use twilight_http::Client;
-use twilight_model::{
-    application::{
-        command::{BaseCommandOptionData, CommandOption},
-        component::{ActionRow, Component, TextInput},
-        interaction::Interaction,
-    },
-    http::interaction::InteractionResponse,
-    id::{
-        marker::{ApplicationMarker, GuildMarker},
-        Id,
-    },
-};
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
@@ -25,7 +25,7 @@ async fn main() -> Result<(), Error> {
     env_logger::init();
 
     let config = Config::new(token, Intents::GUILD_MESSAGES);
-    let mut manager = discord::manager::connect(config).await?;
+    let mut manager = manager::connect(config).await?;
 
     let rest = manager.rest();
 

@@ -19,6 +19,7 @@
 //! ```
 
 use crate::{
+    model::gateway::event::Event,
     proto::{Config, GatewayContext},
     Error, API_VERSION,
 };
@@ -27,11 +28,12 @@ use std::{fmt::Debug, ops::Deref, sync::Arc, time::Duration};
 use tokio::{net::TcpStream, time::Interval};
 use tokio_tungstenite::{self as ws, WebSocketStream};
 use twilight_http::Client;
-use twilight_model::gateway::event::Event;
 use ws::{
     tungstenite::{protocol::CloseFrame, Message},
     MaybeTlsStream,
 };
+
+pub use twilight_http as http;
 
 /// Connect to the discord gateway.
 ///
@@ -166,7 +168,7 @@ impl Manager {
     ) -> Result<Option<Event>, Error> {
         Ok(match msg {
             Message::Close(Some(CloseFrame { code, reason })) => {
-                log::debug!("conn closed: code= {} reason= {}", code, reason);
+                log::info!("conn closed: code= {} reason= {}", code, reason);
                 self.ctx.recv_close_code(code);
                 None
             }

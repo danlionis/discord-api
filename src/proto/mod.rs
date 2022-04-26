@@ -158,8 +158,11 @@ impl GatewayContext {
     where
         C: Into<Config>,
     {
+        let config: Config = config.into();
+        assert!(!config.token.is_empty(), "token cannot be empty");
+
         GatewayContext {
-            config: config.into(),
+            config,
             seq: 0,
             heartbeat_interval: 0,
             send_queue: VecDeque::with_capacity(SEND_QUEUE_SIZE),
@@ -306,7 +309,9 @@ impl GatewayContext {
         }
     }
 
-    /// Processes a discord event received from the gateway
+    /// Processes a discord event received from the gateway.
+    ///
+    /// Takes an JSON string as input and returns the deserialized [`GatewayEvent`].
     #[cfg(feature = "json")]
     pub fn recv_json(&mut self, input: &str) -> Result<GatewayEvent, serde_json::Error> {
         use serde::de::DeserializeSeed;
@@ -343,7 +348,7 @@ impl GatewayContext {
     #[cfg(feature = "json")]
     pub fn send_iter_json(&mut self) -> impl Iterator<Item = String> + '_ {
         self.send_iter()
-            .map(|cmd| serde_json::to_string(&cmd).unwrap())
+            .map(|cmd| serde_json::to_string(&cmd).expect("command is always serializable"))
     }
 
     /// Creates a discord command to be sent to the gateway.
@@ -376,7 +381,8 @@ impl GatewayContext {
     /// [send]: GatewayContext::send
     #[cfg(feature = "json")]
     pub fn send_json(&mut self) -> Option<String> {
-        self.send().map(|cmd| serde_json::to_string(&cmd).unwrap())
+        self.send()
+            .map(|cmd| serde_json::to_string(&cmd).expect("command is always serializable"))
     }
 
     /// Returns true if the underlying gateway connection has to be reconnected
@@ -455,7 +461,13 @@ mod tests {
     }
 
     #[test]
-    fn test_connect() {
+    #[should_panic]
+    fn empty_token() {
+        let _ = GatewayContext::new(("", Intents::empty()));
+    }
+
+    #[test]
+    fn connect() {
         let token = "TOKEN";
         let mut conn = GatewayContext::new((token, Intents::empty()));
         assert_eq!(State::Closed, *conn.state());
@@ -480,7 +492,7 @@ mod tests {
     }
 
     #[test]
-    fn test_resume() {
+    fn resume() {
         let token = "TOKEN";
         let mut conn = GatewayContext::new((token, Intents::empty()));
         let _session_id = "session_id".to_string();
@@ -503,13 +515,15 @@ mod tests {
         assert_eq!(State::Replaying, *conn.state());
         assert_eq!(15, conn.heartbeat_interval());
 
-        let ready = create_default_ready();
-        conn.recv(&ready);
+        conn.recv(&GatewayEvent::Dispatch(
+            conn.seq,
+            Box::new(DispatchEvent::Resumed),
+        ));
         assert_eq!(State::Ready, *conn.state());
     }
 
     #[test]
-    fn test_invalid_session() {
+    fn invalid_session() {
         let token = "TOKEN";
         let mut conn = GatewayContext::new((token, Intents::empty()));
         assert_eq!(State::Closed, *conn.state());
@@ -528,7 +542,7 @@ mod tests {
     }
 
     #[test]
-    fn test_heartbeat_request() {
+    fn heartbeat_request() {
         let token = "TOKEN";
         let mut conn = GatewayContext::new((token, Intents::empty()));
         assert_eq!(State::Closed, *conn.state());
