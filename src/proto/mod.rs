@@ -108,15 +108,16 @@ const SEND_QUEUE_SIZE: usize = 1;
 /// # Example
 /// see module docs
 #[derive(Debug)]
+#[allow(missing_docs)]
 pub struct GatewayContext {
-    config: Config,
+    pub config: Config,
     /// sequence number
-    seq: u64,
-    session_id: String,
-    heartbeat_interval: u64,
-    send_queue: VecDeque<GatewayCommand>,
-    state: State,
-    socket_closed: bool,
+    pub seq: u64,
+    pub session_id: String,
+    pub heartbeat_interval: u64,
+    pub send_queue: VecDeque<GatewayCommand>,
+    pub state: State,
+    pub socket_closed: bool,
 }
 
 /// State of the gateway connection

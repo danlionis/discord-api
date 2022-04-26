@@ -116,6 +116,11 @@ impl Manager {
         &self.rest
     }
 
+    /// Get a reference to the underlying [`GatewayContext`]
+    pub fn context(&self) -> &GatewayContext {
+        &self.ctx
+    }
+
     /// Receive an event from the gateway
     pub async fn recv(&mut self) -> Result<Event, Error> {
         loop {
