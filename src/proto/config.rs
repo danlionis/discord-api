@@ -32,13 +32,7 @@ impl Config {
     {
         Config {
             gateway_url: None,
-            identify_properties: IdentifyProperties::new(
-                LIB_NAME,
-                LIB_NAME,
-                std::env::consts::OS,
-                "",
-                "",
-            ),
+            identify_properties: IdentifyProperties::new(LIB_NAME, LIB_NAME, std::env::consts::OS),
             intents,
             large_threshold: 50,
             presence: None,

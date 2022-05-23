@@ -419,7 +419,7 @@ mod tests {
     use twilight_model::{
         gateway::{payload::incoming::Ready, Intents},
         id::Id,
-        oauth::{current_application_info::ApplicationFlags, PartialApplication},
+        oauth::{ApplicationFlags, PartialApplication},
         user::CurrentUser,
     };
 

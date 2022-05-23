@@ -14,9 +14,9 @@ serde = { version = "1.0", features = ["derive"] }
 tokio = { version = "1.17", features = ["full"], optional = true }
 tokio-tungstenite = { version = "0.13", features = ["tls"], optional = true }
 futures = { version = "0.3", optional = true }
-twilight-model = "0.10"
-twilight-http = { version = "0.10", optional = true }
-twilight-util = { version = "0.10", optional = true, features = ["builder"] }
+twilight-model = "0.11"
+twilight-http = { version = "0.11", optional = true }
+twilight-util = { version = "0.11", optional = true, features = ["builder"] }
 
 [dev-dependencies]
 env_logger = "0.9"
