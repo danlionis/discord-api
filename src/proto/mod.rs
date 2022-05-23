@@ -321,7 +321,7 @@ impl GatewayContext {
 
         let deserializer = GatewayEventDeserializer::from_json(input).unwrap();
         let mut json_deserializer = Deserializer::from_str(input);
-        let event = deserializer.deserialize(&mut json_deserializer).unwrap();
+        let event = deserializer.deserialize(&mut json_deserializer)?;
         self.recv(&event);
         Ok(event)
     }

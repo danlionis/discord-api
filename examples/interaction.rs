@@ -63,6 +63,8 @@ async fn deploy_guild_commands(
         .command_options(&[CommandOption::User(BaseCommandOptionData {
             name: "target".to_owned(),
             description: "target channel".to_owned(),
+            description_localizations: None,
+            name_localizations: None,
             required: true,
         })])
         .unwrap()
