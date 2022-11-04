@@ -93,7 +93,7 @@ impl Display for CloseCode {
     }
 }
 
-impl std::error::Error for CloseCode {}
+// impl std::error::Error for CloseCode {}
 
 impl From<u16> for CloseCode {
     fn from(v: u16) -> Self {
@@ -206,4 +206,32 @@ pub enum ApiError {
     InvalidAPIVersion = 50041,
     ReactionBlocked = 90001,
     Overloaded = 130000,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_recoverable_close_code() {
+        for i in 1000..=1999 {
+            let code = CloseCode::from(i);
+            assert!(code.is_recoverable());
+        }
+
+        let recoverable_errors = [
+            CloseCode::UnknownError,
+            CloseCode::UnknownOpcode,
+            CloseCode::DecodeError,
+            CloseCode::NotAuthenticated,
+            CloseCode::AlreadyAuthenticated,
+            CloseCode::InvalidSeq,
+            CloseCode::RateLimited,
+            CloseCode::SessionTimedOut,
+        ];
+
+        for code in recoverable_errors {
+            assert!(code.is_recoverable());
+        }
+    }
 }
