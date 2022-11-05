@@ -65,6 +65,8 @@ pub async fn connect(config: Config) -> Result<Manager, Error> {
         info
     };
 
+    log::debug!("BotConnectionInfo= {:?}", &info);
+
     let (mut socket, _) = ws::connect_async(&info.url).await.unwrap();
 
     // init connection
@@ -121,6 +123,11 @@ impl Manager {
         &self.ctx
     }
 
+    /// Get a mutable reference to the underlying [`GatewayContext`]
+    pub fn context_mut(&mut self) -> &mut GatewayContext {
+        &mut self.ctx
+    }
+
     /// Receive an event from the gateway
     pub async fn recv(&mut self) -> Result<Event, Error> {
         loop {
@@ -139,6 +146,7 @@ impl Manager {
                 ws_msg = self.socket.next() => {
                     match ws_msg {
                         Some(Ok(msg)) => {
+                            log::trace!("received websocket message: {:?}", msg);
                             if let Some(event) = self.handle_ws_message(msg).await? {
                                 return Ok(event);
                             }
@@ -191,7 +199,7 @@ impl Manager {
     async fn reconnect_socket(&mut self) -> Result<(), ws::tungstenite::Error> {
         log::debug!("reconnecting socket");
         let _ = self.socket.close(None).await;
-        let (socket, _) = ws::connect_async(&self.url).await?;
+        let (socket, _) = ws::connect_async(self.ctx.resume_gateway_url()).await?;
         self.socket = socket;
         Ok(())
     }

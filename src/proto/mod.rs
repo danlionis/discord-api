@@ -118,6 +118,7 @@ pub struct GatewayContext {
     pub send_queue: VecDeque<GatewayCommand>,
     pub state: State,
     pub socket_closed: bool,
+    pub resume_url: String,
 }
 
 /// State of the gateway connection
@@ -154,6 +155,13 @@ impl GatewayContext {
         self.heartbeat_interval
     }
 
+    /// Returns the url that should be used for reconnects
+    ///
+    /// https://discord.com/developers/docs/topics/gateway#preparing-to-resume
+    pub fn resume_gateway_url(&self) -> &str {
+        &self.resume_url
+    }
+
     /// Create a new GatewayContext to the discord gateway
     pub fn new<C>(config: C) -> Self
     where
@@ -170,6 +178,7 @@ impl GatewayContext {
             state: State::Closed,
             session_id: String::new(),
             socket_closed: false,
+            resume_url: String::new(),
         }
     }
 
@@ -285,14 +294,16 @@ impl GatewayContext {
                 match event.as_ref() {
                     DispatchEvent::Ready(ready) => {
                         log::info!(
-                            "client ready: version= {} session_id= {} tag= {}#{} shard= {:?}",
+                            "client ready: version= {} session_id= {} tag= {}#{} shard= {:?} resume_url= {}",
                             ready.version,
                             ready.session_id,
                             ready.user.name,
                             ready.user.discriminator(),
-                            ready.shard
+                            ready.shard,
+                            ready.resume_gateway_url,
                         );
 
+                        self.resume_url = ready.resume_gateway_url.clone();
                         self.session_id = ready.session_id.clone();
                         self.state = State::Ready;
                     }
@@ -438,6 +449,7 @@ mod tests {
                 user: create_default_user(),
                 session_id: "session_id".into(),
                 shard: Some([0, 1]),
+                resume_gateway_url: "resume_url".to_string(),
             }))),
         )
     }

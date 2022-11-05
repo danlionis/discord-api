@@ -1,10 +1,11 @@
 use discord::{
+    manager::{self, Manager},
     model::gateway::{event::DispatchEvent, Intents},
     proto::Config,
     Error,
 };
-use std::{convert::TryFrom, sync::Arc};
-use twilight_http::{request::channel::reaction::RequestReactionType, Client};
+use std::convert::TryFrom;
+use twilight_http::request::channel::reaction::RequestReactionType;
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
@@ -17,15 +18,15 @@ async fn main() -> Result<(), Error> {
 
     while let Ok(event) = manager.recv().await {
         if let Ok(event) = DispatchEvent::try_from(event) {
-            let rest = Arc::clone(manager.rest());
-            tokio::spawn(handle_event(rest, event));
+            handle_event(&mut manager, event).await;
         }
     }
 
     Ok(())
 }
 
-async fn handle_event(rest: Arc<Client>, event: DispatchEvent) {
+async fn handle_event(manager: &mut Manager, event: DispatchEvent) {
+    let rest = manager.rest();
     if let DispatchEvent::MessageCreate(msg) = event {
         if msg.content.starts_with("!ping") {
             let _ = rest
@@ -45,6 +46,11 @@ async fn handle_event(rest: Arc<Client>, event: DispatchEvent) {
                 )
                 .exec()
                 .await;
+        }
+        if msg.content.starts_with("!reconnect") {
+            manager
+                .context_mut()
+                .recv(&twilight_model::gateway::event::GatewayEvent::Reconnect);
         }
     }
 }
