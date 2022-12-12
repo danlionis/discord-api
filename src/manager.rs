@@ -59,7 +59,7 @@ pub async fn connect(config: Config) -> Result<Manager, Error> {
     let mut ctx = GatewayContext::new(config.clone());
 
     let info = {
-        let mut info = rest.gateway().authed().exec().await?.model().await.unwrap();
+        let mut info = rest.gateway().authed().await?.model().await.unwrap();
         info.url.push_str("/?v=");
         info.url.push_str(&API_VERSION.to_string());
         info

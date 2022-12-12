@@ -291,7 +291,7 @@ impl GatewayContext {
                 }
             }
             GatewayEvent::Dispatch(seq, event) => {
-                match event.as_ref() {
+                match event {
                     DispatchEvent::Ready(ready) => {
                         log::info!(
                             "client ready: version= {} session_id= {} tag= {}#{} shard= {:?} resume_url= {}",
@@ -439,7 +439,7 @@ mod tests {
     fn create_default_ready() -> GatewayEvent {
         GatewayEvent::Dispatch(
             0,
-            Box::new(DispatchEvent::Ready(Box::new(Ready {
+            DispatchEvent::Ready(Box::new(Ready {
                 guilds: Vec::new(),
                 version: 0,
                 application: PartialApplication {
@@ -450,7 +450,7 @@ mod tests {
                 session_id: "session_id".into(),
                 shard: Some([0, 1]),
                 resume_gateway_url: "resume_url".to_string(),
-            }))),
+            })),
         )
     }
 
@@ -528,10 +528,7 @@ mod tests {
         assert_eq!(State::Replaying, *conn.state());
         assert_eq!(15, conn.heartbeat_interval());
 
-        conn.recv(&GatewayEvent::Dispatch(
-            conn.seq,
-            Box::new(DispatchEvent::Resumed),
-        ));
+        conn.recv(&GatewayEvent::Dispatch(conn.seq, DispatchEvent::Resumed));
         assert_eq!(State::Ready, *conn.state());
     }
 

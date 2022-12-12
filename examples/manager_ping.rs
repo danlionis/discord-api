@@ -1,5 +1,5 @@
 use discord::{
-    manager::{self, Manager},
+    manager::Manager,
     model::gateway::{event::DispatchEvent, Intents},
     proto::Config,
     Error,
@@ -34,7 +34,6 @@ async fn handle_event(manager: &mut Manager, event: DispatchEvent) {
                 .reply(msg.id)
                 .content("pong")
                 .unwrap()
-                .exec()
                 .await;
         }
         if msg.content.starts_with("!react") {
@@ -44,7 +43,6 @@ async fn handle_event(manager: &mut Manager, event: DispatchEvent) {
                     msg.id,
                     &RequestReactionType::Unicode { name: "😀" },
                 )
-                .exec()
                 .await;
         }
         if msg.content.starts_with("!reconnect") {

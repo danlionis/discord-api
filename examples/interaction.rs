@@ -12,16 +12,10 @@ use discord::{
 };
 use std::{convert::TryFrom, sync::Arc};
 use twilight_model::{
-    application::{
-        component::{ActionRow, Component, TextInput},
-        interaction::InteractionType,
-    },
+    application::interaction::InteractionType,
     http::interaction::{InteractionResponse, InteractionResponseType},
 };
-use twilight_util::builder::{
-    command::{CommandBuilder, UserBuilder},
-    InteractionResponseDataBuilder,
-};
+use twilight_util::builder::{command::CommandBuilder, InteractionResponseDataBuilder};
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
@@ -35,7 +29,7 @@ async fn main() -> Result<(), Error> {
     let rest = manager.rest();
 
     let application_id = {
-        let response = rest.current_user_application().exec().await?;
+        let response = rest.current_user_application().await?;
 
         response.model().await.unwrap().id
     };
@@ -65,7 +59,6 @@ async fn deploy_guild_commands(
 
     rest.interaction(app_id)
         .set_guild_commands(guild_id, &[command])
-        .exec()
         .await?;
 
     Ok(())
@@ -93,7 +86,6 @@ async fn handle_event(rest: Arc<Client>, event: DispatchEvent, app_id: Id<Applic
 
                 rest.interaction(interaction.application_id)
                     .create_response(interaction.id, &interaction.token, response)
-                    .exec()
                     .await
                     .unwrap();
             }
