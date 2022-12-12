@@ -1,13 +1,7 @@
 use discord::{
     manager::{self, http::Client},
     model::{
-        application::{
-            command::{BaseCommandOptionData, CommandOption},
-            component::{ActionRow, Component, TextInput},
-            interaction::Interaction,
-        },
         gateway::{event::DispatchEvent, Intents},
-        http::interaction::InteractionResponse,
         id::{
             marker::{ApplicationMarker, GuildMarker},
             Id,
@@ -17,6 +11,17 @@ use discord::{
     Error,
 };
 use std::{convert::TryFrom, sync::Arc};
+use twilight_model::{
+    application::{
+        component::{ActionRow, Component, TextInput},
+        interaction::InteractionType,
+    },
+    http::interaction::{InteractionResponse, InteractionResponseType},
+};
+use twilight_util::builder::{
+    command::{CommandBuilder, UserBuilder},
+    InteractionResponseDataBuilder,
+};
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
@@ -30,14 +35,9 @@ async fn main() -> Result<(), Error> {
     let rest = manager.rest();
 
     let application_id = {
-        let info = rest
-            .current_user_application()
-            .exec()
-            .await?
-            .model()
-            .await
-            .unwrap();
-        info.id
+        let response = rest.current_user_application().exec().await?;
+
+        response.model().await.unwrap().id
     };
 
     while let Ok(event) = manager.recv().await {
@@ -55,25 +55,18 @@ async fn deploy_guild_commands(
     app_id: Id<ApplicationMarker>,
     guild_id: Id<GuildMarker>,
 ) -> Result<(), Error> {
-    let _command = rest
-        .interaction(app_id)
-        .create_guild_command(guild_id)
-        .chat_input("report", "Report user")
-        .unwrap()
-        .command_options(&[CommandOption::User(BaseCommandOptionData {
-            name: "target".to_owned(),
-            description: "target channel".to_owned(),
-            description_localizations: None,
-            name_localizations: None,
-            required: true,
-        })])
-        .unwrap()
+    let command = CommandBuilder::new(
+        "ping",
+        "pong",
+        twilight_model::application::command::CommandType::ChatInput,
+    )
+    .guild_id(guild_id)
+    .build();
+
+    rest.interaction(app_id)
+        .set_guild_commands(guild_id, &[command])
         .exec()
-        .await?
-        .model()
-        .await
-        .unwrap();
-    dbg!(_command);
+        .await?;
 
     Ok(())
 }
@@ -87,40 +80,24 @@ async fn handle_event(rest: Arc<Client>, event: DispatchEvent, app_id: Id<Applic
                     .unwrap();
             }
         }
-        DispatchEvent::InteractionCreate(interaction) => match &interaction.0 {
-            Interaction::ApplicationCommand(application_command) => {
-                rest.interaction(app_id).create_response(
-                    interaction.id(),
-                    &application_command.token,
-                    &InteractionResponse {
-                        kind: twilight_model::http::interaction::InteractionResponseType::Modal,
-                        data: Some(
-                            twilight_util::builder::InteractionResponseDataBuilder::new()
-                                .title("test".to_owned())
-                                .custom_id("report_modal".to_owned())
-                                .components([
-                                    Component::ActionRow(ActionRow {
-                                        components: vec![
-                                            Component::TextInput(TextInput {
-                                            custom_id: "reason".to_owned(),
-                                            required: Some(true),
-                                            label: "Reason".to_owned(),
-                                            max_length: None,
-                                            min_length: None,
-                                            placeholder: Some("Why do you want to report".to_owned()),
-                                            style: twilight_model::application::component::text_input::TextInputStyle::Paragraph,
-                                            value: None,
-                                    })
-                                    ],
-                                    }),
-                                ])
-                                .build(),
-                        ),
-                    },
-                ).exec().await.unwrap();
+        DispatchEvent::InteractionCreate(interaction) => {
+            if interaction.kind == InteractionType::ApplicationCommand {
+                let response = &InteractionResponse {
+                    kind: InteractionResponseType::ChannelMessageWithSource,
+                    data: Some(
+                        InteractionResponseDataBuilder::new()
+                            .content("pong")
+                            .build(),
+                    ),
+                };
+
+                rest.interaction(interaction.application_id)
+                    .create_response(interaction.id, &interaction.token, response)
+                    .exec()
+                    .await
+                    .unwrap();
             }
-            _ => {}
-        },
+        }
         _ => {}
     }
 }
