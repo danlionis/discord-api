@@ -11,7 +11,7 @@
 pub(crate) const LIB_NAME: &str = "discord-api";
 
 /// Gateway Api version
-pub const API_VERSION: u16 = 9;
+pub const API_VERSION: u16 = 10;
 
 pub mod error;
 #[cfg(feature = "manager")]
