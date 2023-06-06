@@ -16,7 +16,9 @@ pub const API_VERSION: u16 = 10;
 pub mod error;
 #[cfg(feature = "manager")]
 pub mod manager;
+
 pub mod proto;
+pub use proto::*;
 
 pub use error::Error;
 pub use twilight_model as model;

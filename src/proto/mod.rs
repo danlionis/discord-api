@@ -157,7 +157,7 @@ impl GatewayContext {
 
     /// Returns the url that should be used for reconnects
     ///
-    /// https://discord.com/developers/docs/topics/gateway#preparing-to-resume
+    /// <https://discord.com/developers/docs/topics/gateway#preparing-to-resume>
     pub fn resume_gateway_url(&self) -> &str {
         &self.resume_url
     }
